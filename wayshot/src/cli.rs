@@ -24,8 +24,19 @@ pub struct Cli {
     pub slurp: Option<String>,
 
     /// Enable cursor in screenshots
+    /// defaults to false
+    #[arg(long)]
+    pub cursor: Option<bool>,
+
+    /// Filename format
+    /// defaults to wayshot-%Y_%m_%d-%H_%M_%S
+    #[arg(long)]
+    pub filename_format: Option<String>,
+
+    /// Path to config.toml file
+    /// defaults to $HOME/.config/wayshot
     #[arg(short, long)]
-    pub cursor: bool,
+    pub config: Option<PathBuf>,
 
     /// Set image encoder, by default uses the file extension from the OUTPUT
     /// positional argument. Otherwise defaults to png.

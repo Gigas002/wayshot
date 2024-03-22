@@ -4,14 +4,15 @@ use std::{
 };
 
 use clap::Parser;
+use config::Config;
 use eyre::{bail, Result};
 use libwayshot::{region::LogicalRegion, WayshotConnection};
 
 mod cli;
+mod config;
 mod utils;
 
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
-use utils::EncodingFormat;
 
 fn select_ouput<T>(ouputs: &[T]) -> Option<usize>
 where
@@ -29,40 +30,40 @@ where
 }
 
 fn main() -> Result<()> {
+    // cli args
     let cli = cli::Cli::parse();
     tracing_subscriber::fmt()
         .with_max_level(cli.log_level)
         .with_writer(std::io::stderr)
         .init();
 
-    let input_encoding = cli
-        .file
-        .as_ref()
-        .and_then(|pathbuf| pathbuf.try_into().ok());
-    let requested_encoding = cli
+    // config path
+    let config_path = dirs::config_local_dir()
+        .and_then(|path| Some(path.join("wayshot").join("config.toml")))
+        .unwrap_or_default();
+    let config_path = cli.config.unwrap_or(config_path);
+
+    // configs
+    let config = Config::load(&config_path).unwrap_or_default();
+    let screenshot = config.screenshot.unwrap_or_default();
+    let filesystem = config.filesystem.unwrap_or_default();
+
+    // vars
+    let cursor = cli.cursor.unwrap_or(screenshot.cursor.unwrap_or_default());
+    let filename_format = cli.filename_format.unwrap_or(filesystem.format.unwrap());
+    let encoding = cli
         .encoding
-        .or(input_encoding)
-        .unwrap_or(EncodingFormat::default());
-
-    if let Some(input_encoding) = input_encoding {
-        if input_encoding != requested_encoding {
-            tracing::warn!(
-                "The encoding requested '{requested_encoding}' does not match the output file's encoding '{input_encoding}'. Still using the requested encoding however.",
-            );
-        }
-    }
-
+        .unwrap_or(filesystem.encoding.unwrap_or_default());
+    let dir = filesystem.path.unwrap();
     let file = match cli.file {
-        Some(pathbuf) => {
-            if pathbuf.to_string_lossy() == "-" {
-                None
-            } else {
-                Some(pathbuf)
-            }
-        }
-        None => Some(utils::get_default_file_name(requested_encoding)),
+        Some(path) => Some(path),
+        _ => match filesystem.filesystem {
+            Some(true) => Some(utils::get_full_file_name(&dir, &filename_format, encoding)),
+            _ => None,
+        },
     };
 
+    // actual work
     let wayshot_conn = WayshotConnection::new()?;
 
     if cli.list_outputs {
@@ -87,12 +88,12 @@ fn main() -> Result<()> {
                 }()
                 .map_err(|_| libwayshot::Error::FreezeCallbackError)
             }),
-            cli.cursor,
+            cursor,
         )?
     } else if let Some(output_name) = cli.output {
         let outputs = wayshot_conn.get_all_outputs();
         if let Some(output) = outputs.iter().find(|output| output.name == output_name) {
-            wayshot_conn.screenshot_single_output(output, cli.cursor)?
+            wayshot_conn.screenshot_single_output(output, cursor)?
         } else {
             bail!("No output found!");
         }
@@ -103,12 +104,12 @@ fn main() -> Result<()> {
             .map(|display| display.name.to_string())
             .collect();
         if let Some(index) = select_ouput(&output_names) {
-            wayshot_conn.screenshot_single_output(&outputs[index], cli.cursor)?
+            wayshot_conn.screenshot_single_output(&outputs[index], cursor)?
         } else {
             bail!("No output found!");
         }
     } else {
-        wayshot_conn.screenshot_all(cli.cursor)?
+        wayshot_conn.screenshot_all(cursor)?
     };
 
     if let Some(file) = file {
@@ -118,7 +119,7 @@ fn main() -> Result<()> {
         let mut buffer = Cursor::new(Vec::new());
 
         let mut writer = BufWriter::new(stdout.lock());
-        image_buffer.write_to(&mut buffer, requested_encoding)?;
+        image_buffer.write_to(&mut buffer, encoding)?;
 
         writer.write_all(buffer.get_ref())?;
     }

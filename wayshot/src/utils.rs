@@ -1,12 +1,9 @@
+use chrono::Local;
 use clap::ValueEnum;
 use eyre::{bail, ContextCompat, Error, Result};
+use serde::{Deserialize, Serialize};
 
-use std::{
-    fmt::Display,
-    path::PathBuf,
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fmt::Display, path::PathBuf, str::FromStr};
 
 use libwayshot::region::{LogicalRegion, Position, Region, Size};
 
@@ -52,7 +49,8 @@ pub fn parse_geometry(g: &str) -> Result<LogicalRegion> {
 }
 
 /// Supported image encoding formats.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum EncodingFormat {
     /// JPG/JPEG encoder.
     Jpg,
@@ -133,11 +131,14 @@ impl FromStr for EncodingFormat {
     }
 }
 
-pub fn get_default_file_name(extension: EncodingFormat) -> PathBuf {
-    let time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|time| time.as_secs().to_string())
-        .unwrap_or("unknown".into());
+pub fn get_full_file_name(
+    dir: &PathBuf,
+    filename_format: &str,
+    encoding: EncodingFormat,
+) -> PathBuf {
+    let format = Local::now().format(filename_format);
 
-    format!("{time}-wayshot.{extension}").into()
+    let file_name = format!("{format}.{encoding}");
+
+    dir.join(file_name)
 }
