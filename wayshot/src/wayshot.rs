@@ -1,12 +1,12 @@
 use clap::Parser;
+use cli::Cli;
 use config::Config;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
 use eyre::{bail, Result};
 use libwayshot::{region::LogicalRegion, WayshotConnection};
 use nix::unistd::{fork, ForkResult};
 use std::{
-    io::{self, stdout, BufWriter, Cursor, Write},
-    process::Command,
+    env, io::{self, BufWriter, Cursor, Write}, path::PathBuf, process::Command, str::FromStr
 };
 use wl_clipboard_rs::copy::{MimeType, Options, Source};
 
@@ -14,14 +14,14 @@ mod cli;
 mod config;
 mod utils;
 
-fn select_ouput<T>(ouputs: &[T]) -> Option<usize>
+fn select_display<T>(displays: &[T]) -> Option<usize>
 where
     T: ToString,
 {
     let Ok(selection) = FuzzySelect::with_theme(&ColorfulTheme::default())
         .with_prompt("Choose Screen")
         .default(0)
-        .items(ouputs)
+        .items(displays)
         .interact()
     else {
         return None;
@@ -31,7 +31,7 @@ where
 
 fn main() -> Result<()> {
     // cli args
-    let cli = cli::Cli::parse();
+    let cli = Cli::parse();
 
     // config path
     let config_path = dirs::config_local_dir()
@@ -77,16 +77,38 @@ fn main() -> Result<()> {
         }
     }
 
+    let stdout_print = cli.stdout.unwrap_or(screenshot.stdout.unwrap_or_default());
+    let file = match cli.file {
+        Some(f) => {
+            if f.is_dir() {
+                Some(utils::get_full_file_name(&f, &filename_format, encoding))
+            } else {
+                Some(f)
+            }
+        }
+        _ => {
+            if screenshot.fs.unwrap_or_default() {
+                // default to current dir
+                let dir = fs.path.unwrap_or(env::current_dir().unwrap_or_default());
+                Some(utils::get_full_file_name(&dir, &filename_format, encoding))
+            } else {
+                None
+            }
+        }
+    };
+    let display = cli.display.or(screenshot.display);
+
     let wayshot_conn = WayshotConnection::new()?;
 
-    if cli.list_outputs {
-        let valid_outputs = wayshot_conn.get_all_outputs();
-        for output in valid_outputs {
-            tracing::info!("{:#?}", output.name);
+    if cli.list_displays {
+        let valid_displays = wayshot_conn.get_all_outputs();
+        for d in valid_displays {
+            tracing::info!("{:#?}", d.name);
         }
         return Ok(());
     }
 
+    // take a screenshot
     let image_buffer = if let Some(slurp_region) = cli.slurp {
         let slurp_region = slurp_region.clone();
         wayshot_conn.screenshot_freeze(
@@ -103,57 +125,39 @@ fn main() -> Result<()> {
             }),
             cursor,
         )?
-    } else if let Some(output_name) = cli.output {
-        let outputs = wayshot_conn.get_all_outputs();
-        if let Some(output) = outputs.iter().find(|output| output.name == output_name) {
-            wayshot_conn.screenshot_single_output(output, cursor)?
+    } else if let Some(display_name) = display {
+        let displays = wayshot_conn.get_all_outputs();
+        if let Some(d) = displays.iter().find(|d| d.name == display_name) {
+            wayshot_conn.screenshot_single_output(d, cursor)?
         } else {
-            bail!("No output found!");
+            bail!("No display found!");
         }
-    } else if cli.choose_output {
-        let outputs = wayshot_conn.get_all_outputs();
-        let output_names: Vec<&str> = outputs
+    } else if cli.choose_display {
+        let displays = wayshot_conn.get_all_outputs();
+        let display_names: Vec<&str> = displays
             .iter()
             .map(|display| display.name.as_str())
             .collect();
-        if let Some(index) = select_ouput(&output_names) {
-            wayshot_conn.screenshot_single_output(&outputs[index], cursor)?
+        if let Some(index) = select_display(&display_names) {
+            wayshot_conn.screenshot_single_output(&displays[index], cursor)?
         } else {
-            bail!("No output found!");
+            bail!("No display found!");
         }
     } else {
         wayshot_conn.screenshot_all(cursor)?
     };
 
-    let mut stdout_print = false;
-    let file = match cli.file {
-        Some(mut pathbuf) => {
-            if pathbuf.to_string_lossy() == "-" {
-                stdout_print = true;
-                None
-            } else {
-                if pathbuf.is_dir() {
-                    pathbuf.push(utils::get_default_file_name(&filename_format, encoding));
-                }
-                Some(pathbuf)
-            }
-        }
-        None => {
-            if clipboard {
-                None
-            } else {
-                Some(utils::get_default_file_name(&filename_format, encoding))
-            }
-        }
-    };
-
+    // save the screenshot data
     let mut image_buf: Option<Cursor<Vec<u8>>> = None;
-    if let Some(file) = file {
-        image_buffer.save(file)?;
-    } else if stdout_print {
+
+    if let Some(file_path) = file {
+        image_buffer.save(file_path)?;
+    }
+
+    if stdout_print {
         let mut buffer = Cursor::new(Vec::new());
         image_buffer.write_to(&mut buffer, encoding)?;
-        let stdout = stdout();
+        let stdout = io::stdout();
         let mut writer = BufWriter::new(stdout.lock());
         writer.write_all(buffer.get_ref())?;
         image_buf = Some(buffer);

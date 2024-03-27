@@ -139,9 +139,10 @@ impl FromStr for EncodingFormat {
 }
 
 pub fn get_full_file_name(dir: &Path, filename_format: &str, encoding: EncodingFormat) -> PathBuf {
+    let checked_path = expanduser::expanduser(dir.to_str().unwrap()).unwrap();
     let filename = get_default_file_name(filename_format, encoding);
 
-    dir.join(filename)
+    checked_path.join(filename)
 }
 
 pub fn get_default_file_name(filename_format: &str, encoding: EncodingFormat) -> PathBuf {

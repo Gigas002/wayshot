@@ -9,9 +9,14 @@ pub struct Cli {
     /// Custom output path can be of the following types:
     ///     1. Directory (Default naming scheme is used for the image output).
     ///     2. Path (Encoding is automatically inferred from the extension).
-    ///     3. `-` (Indicates writing to terminal [stdout]).
+    ///     3. None (no screenshot will be saved on filesystem/drive)
     #[arg(value_name = "OUTPUT", verbatim_doc_comment)]
     pub file: Option<PathBuf>,
+
+    /// Write screenshot to terminal/stdout.
+    /// Defaults to config value (`false`)
+    #[arg(long, verbatim_doc_comment)]
+    pub stdout: Option<bool>,
 
     /// Copy image to clipboard. Can be used simultaneously with [OUTPUT] or stdout.
     /// Wayshot persists in the background offering the image till the clipboard is overwritten.
@@ -19,6 +24,7 @@ pub struct Cli {
     #[arg(long, verbatim_doc_comment)]
     pub clipboard: Option<bool>,
 
+    /// Log level to be used for printing to stderr
     /// Defaults to config value (`info`)
     #[arg(long, verbatim_doc_comment)]
     pub log_level: Option<Level>,
@@ -37,17 +43,17 @@ pub struct Cli {
     #[arg(long, verbatim_doc_comment, visible_aliases = ["extension", "format", "output-format"], value_name = "FILE_EXTENSION")]
     pub encoding: Option<EncodingFormat>,
 
-    /// List all valid outputs
-    #[arg(short, long, alias = "listoutputs")]
-    pub list_outputs: bool,
+    /// List all valid displays
+    #[arg(short, long, alias = "listdisplays")]
+    pub list_displays: bool,
 
-    /// Choose a particular output/display to screenshot
+    /// Choose a particular display to screenshot
     #[arg(short, long, conflicts_with = "slurp")]
-    pub output: Option<String>,
+    pub display: Option<String>,
 
-    /// Present a fuzzy selector for output/display selection
-    #[arg(long, alias = "chooseoutput", conflicts_with_all = ["slurp", "output"])]
-    pub choose_output: bool,
+    /// Present a fuzzy selector for display selection
+    #[arg(long, alias = "choosedisplay", conflicts_with_all = ["slurp", "display"])]
+    pub choose_display: bool,
 
     /// Path to your config file.
     /// Defaults to:
