@@ -162,7 +162,7 @@ fn main() -> Result<()> {
 
     if stdout_print {
         let mut buffer = Cursor::new(Vec::new());
-        image_buffer.write_to(&mut buffer, encoding)?;
+        image_buffer.write_to(&mut buffer, encoding.into())?;
         let stdout = io::stdout();
         let mut writer = BufWriter::new(stdout.lock());
         writer.write_all(buffer.get_ref())?;
@@ -174,7 +174,7 @@ fn main() -> Result<()> {
             Some(buf) => buf,
             None => {
                 let mut buffer = Cursor::new(Vec::new());
-                image_buffer.write_to(&mut buffer, encoding)?;
+                image_buffer.write_to(&mut buffer, encoding.into())?;
                 buffer
             }
         })?;
