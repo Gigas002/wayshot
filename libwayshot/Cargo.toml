@@ -10,11 +10,11 @@ edition.workspace = true
 
 [dependencies]
 tracing.workspace = true
-image = { version = "0.25", default-features = false }
-memmap2 = "0.9.0"
-nix = { version = "0.28", features = ["fs", "mman"] }
+image = { version = "0", default-features = false }
+memmap2 = "0"
+nix = { version = "0", features = ["fs", "mman"] }
 thiserror = "1"
 
-wayland-client = "0.31.1"
-wayland-protocols = { version = "0.31.0", features = ["client", "unstable"] }
-wayland-protocols-wlr = { version = "0.2.0", features = ["client"] }
+wayland-client = "0"
+wayland-protocols = { version = "0", features = ["client", "unstable"] }
+wayland-protocols-wlr = { version = "0", features = ["client"] }
