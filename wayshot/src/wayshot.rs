@@ -35,7 +35,9 @@ fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
     // config path
-    let config_path = cli.config.unwrap_or(Config::get_default_path());
+    let config_path = cli
+        .config
+        .unwrap_or(Config::get_default_path().unwrap_or_default());
 
     // config
     let config = Config::load(&config_path).unwrap_or_default();

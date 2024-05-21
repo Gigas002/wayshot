@@ -1,6 +1,6 @@
 use crate::utils::EncodingFormat;
 use serde::{Deserialize, Serialize};
-use std::{env, io::Read, path::PathBuf};
+use std::{env, error::Error, io::Read, path::PathBuf};
 use tracing::Level;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -19,18 +19,18 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load(path: &PathBuf) -> Option<Config> {
-        let mut config_file = std::fs::File::open(path).ok()?;
+    pub fn load(path: &PathBuf) -> Result<Config, Box<dyn Error>> {
+        let mut config_file = std::fs::File::open(path)?;
         let mut config_str = String::new();
-        config_file.read_to_string(&mut config_str).ok()?;
+        config_file.read_to_string(&mut config_str)?;
 
-        toml::from_str(&config_str).ok()?
+        toml::from_str(&config_str).map_err(|err| err.into())
     }
 
-    pub fn get_default_path() -> PathBuf {
+    pub fn get_default_path() -> Result<PathBuf, Box<dyn Error>> {
         dirs::config_local_dir()
+            .ok_or_else(|| "Couldn't get local config directory path".into())
             .map(|path| path.join("wayshot").join("config.toml"))
-            .unwrap_or_default()
     }
 }
 
