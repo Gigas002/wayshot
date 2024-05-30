@@ -8,8 +8,7 @@ use image::{ColorType, DynamicImage, ImageBuffer, Pixel};
 use memmap2::MmapMut;
 use rustix::{
     fs::{self, SealFlags},
-    io,
-    shm,
+    io, shm,
 };
 use wayland_client::protocol::{
     wl_buffer::WlBuffer, wl_output, wl_shm::Format, wl_shm_pool::WlShmPool,
@@ -119,7 +118,7 @@ pub fn create_shm_fd() -> std::io::Result<OwnedFd> {
         // Create a file that closes on succesful execution and seal it's operations.
         match fs::memfd_create(
             CString::new("libwayshot")?.as_c_str(),
-            fs::MemfdFlags::CLOEXEC | fs::MemfdFlags::ALLOW_SEALING
+            fs::MemfdFlags::CLOEXEC | fs::MemfdFlags::ALLOW_SEALING,
         ) {
             Ok(fd) => {
                 // This is only an optimization, so ignore errors.
@@ -145,10 +144,8 @@ pub fn create_shm_fd() -> std::io::Result<OwnedFd> {
             // S_IRUSR = Set user read permission bit .
             // S_IWUSR = Set user write permission bit.
             mem_file_handle.as_str(),
-            shm::ShmOFlags::CREATE |
-            shm::ShmOFlags::EXCL |
-            shm::ShmOFlags::RDWR,
-            fs::Mode::RUSR | fs::Mode::WUSR
+            shm::ShmOFlags::CREATE | shm::ShmOFlags::EXCL | shm::ShmOFlags::RDWR,
+            fs::Mode::RUSR | fs::Mode::WUSR,
         ) {
             Ok(fd) => match shm::shm_unlink(mem_file_handle.as_str()) {
                 Ok(_) => return Ok(fd),
