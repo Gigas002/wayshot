@@ -35,8 +35,9 @@ dialoguer = { version = "0", features = ["fuzzy-select"] }
 eyre = "0"
 chrono = "0"
 
-wl-clipboard-rs = "0"
-nix = { version = "0", features = ["process"] }
+# wl-clipboard-rs = "0"
+wl-clipboard-rs = { git = "https://github.com/YaLTeR/wl-clipboard-rs" }
+rustix = { version = "0", features = ["process", "runtime"] }
 toml = { version = "0", default-features = false, features = ["parse"] }
 serde = { version = "1", features = ["derive"] }
 dirs = "5"

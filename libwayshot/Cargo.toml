@@ -12,7 +12,7 @@ edition.workspace = true
 tracing.workspace = true
 image = { version = "0", default-features = false }
 memmap2 = "0"
-nix = { version = "0", features = ["fs", "mman"] }
+rustix = { version = "0", features = ["fs", "shm"] }
 thiserror = "1"
 
 wayland-client = "0"
