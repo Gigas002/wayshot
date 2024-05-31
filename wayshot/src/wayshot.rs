@@ -1,7 +1,6 @@
 use clap::Parser;
 use config::Config;
 use dialoguer::{theme::ColorfulTheme, FuzzySelect};
-use eyre::Ok;
 use eyre::{bail, Result};
 use libwayshot::{region::LogicalRegion, WayshotConnection};
 use rustix::runtime::{fork, Fork};
@@ -20,7 +19,7 @@ fn select_ouput<T>(ouputs: &[T]) -> Option<usize>
 where
     T: ToString,
 {
-    let std::result::Result::Ok(selection) = FuzzySelect::with_theme(&ColorfulTheme::default())
+    let Ok(selection) = FuzzySelect::with_theme(&ColorfulTheme::default())
         .with_prompt("Choose Screen")
         .default(0)
         .items(ouputs)
@@ -192,10 +191,10 @@ fn clipboard_daemonize(buffer: Cursor<Vec<u8>>) -> Result<()> {
     match unsafe { fork() } {
         // Having the image persistently available on the clipboard requires a wayshot process to be alive.
         // Fork the process with a child detached from the main process and have the parent exit
-        std::result::Result::Ok(Fork::Parent(_)) => {
+        Ok(Fork::Parent(_)) => {
             return Ok(());
         }
-        std::result::Result::Ok(Fork::Child(_)) => {
+        Ok(Fork::Child(_)) => {
             opts.foreground(true); // Offer the image till something else is available on the clipboard
             opts.copy(
                 Source::Bytes(buffer.into_inner().into()),
