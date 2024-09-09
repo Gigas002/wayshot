@@ -10,6 +10,12 @@ edition.workspace = true
 
 [dependencies]
 tracing.workspace = true
+gbm = "0"
+drm = "0"
+
+gl = "0"
+khronos-egl = { version = "6",features = ["static"]  }
+
 image = { version = "0", default-features = false }
 memmap2 = "0"
 rustix = { version = "0", features = ["fs", "shm"] }
@@ -18,3 +24,4 @@ thiserror = "1"
 wayland-client = "0"
 wayland-protocols = { version = "0", features = ["client", "unstable"] }
 wayland-protocols-wlr = { version = "0", features = ["client"] }
+wayland-backend = { version = "0", features = ["client_system"] }
