@@ -65,6 +65,8 @@ pub enum EncodingFormat {
     Qoi,
     /// WebP encoder,
     Webp,
+    /// AVIF encoder
+    Avif,
 }
 
 impl Default for EncodingFormat {
@@ -81,6 +83,7 @@ impl From<EncodingFormat> for image::ImageFormat {
             EncodingFormat::Ppm => image::ImageFormat::Pnm,
             EncodingFormat::Qoi => image::ImageFormat::Qoi,
             EncodingFormat::Webp => image::ImageFormat::WebP,
+            EncodingFormat::Avif => image::ImageFormat::Avif,
         }
     }
 }
@@ -120,6 +123,7 @@ impl From<EncodingFormat> for &str {
             EncodingFormat::Ppm => "ppm",
             EncodingFormat::Qoi => "qoi",
             EncodingFormat::Webp => "webp",
+            EncodingFormat::Avif => "avif",
         }
     }
 }

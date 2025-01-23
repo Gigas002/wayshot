@@ -29,6 +29,7 @@ image = { version = "0", default-features = false, features = [
 	"pnm",
 	"qoi",
 	"webp",
+	"avif"
 ] }
 
 dialoguer = { version = "0", features = ["fuzzy-select"] }
