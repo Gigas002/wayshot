@@ -41,6 +41,7 @@ pub fn rotate_image_buffer(
             let flipped_buffer = image::imageops::flip_horizontal(&image);
             image::imageops::rotate270(&flipped_buffer).into()
         }
+        Transform::Normal => return image,
         _ => image,
     };
 

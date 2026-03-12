@@ -773,7 +773,7 @@ mod output_tests {
         let target = WayshotTarget::from(output_info);
         match &target {
             crate::WayshotTarget::Screen(wl_output) => {
-                assert!(wl_output.version() >= 0);
+                let _ = wl_output.version();
             }
             crate::WayshotTarget::Toplevel(_) => panic!("Expected Screen variant"),
         }
