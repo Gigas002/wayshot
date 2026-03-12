@@ -1,5 +1,7 @@
 # Benchmarking libwayshot
 
+Benchmarks run in **GitHub Actions** on every push and PR. The Criterion HTML report is uploaded as the **criterion-report** artifact: open the Actions run → Artifacts → download and open `report/index.html`.
+
 This document describes how to run the benchmarks and how to compare the **EGL** and **Vulkan** capture backends.
 
 ## Quick start
