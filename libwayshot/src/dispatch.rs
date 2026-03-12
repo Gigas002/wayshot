@@ -342,7 +342,14 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for CaptureFrameState {
                         return;
                     }
                 };
-                let Ok(node) = DrmNode::from_dev_id(device) else {
+                let device_i32 = match device.try_into() {
+                    Ok(d) => d,
+                    Err(_) => {
+                        tracing::warn!("Device ID {} does not fit in platform dev_t", device);
+                        return;
+                    }
+                };
+                let Ok(node) = DrmNode::from_dev_id(device_i32) else {
                     tracing::warn!("Failed to create DRM node from device ID: {}", device);
                     return;
                 };
@@ -546,6 +553,7 @@ impl wayland_client::Dispatch<ZwlrLayerSurfaceV1, WlOutput> for LayerShellState 
         }
     }
 }
+#[derive(Debug)]
 pub(crate) struct Card(std::fs::File);
 
 /// Implementing [`AsFd`] is a prerequisite to implementing the traits found

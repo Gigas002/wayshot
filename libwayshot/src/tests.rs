@@ -237,6 +237,7 @@ mod error_tests {
 
 #[cfg(test)]
 mod convert_tests {
+    #[allow(unused_imports)]
     use crate::convert::{Convert, create_converter};
     use image::ColorType;
     use wayland_client::protocol::wl_shm;
@@ -773,7 +774,7 @@ mod output_tests {
         let target = WayshotTarget::from(output_info);
         match &target {
             crate::WayshotTarget::Screen(wl_output) => {
-                assert!(wl_output.as_ref().version() >= 0);
+                assert!(wl_output.version() >= 0);
             }
             crate::WayshotTarget::Toplevel(_) => panic!("Expected Screen variant"),
         }
