@@ -4,6 +4,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use image::{DynamicImage, ImageBuffer, RgbaImage};
 use std::hint::black_box;
+use std::time::Duration;
 use wayland_client::protocol::wl_output::Transform;
 
 use libwayshot::region::Size;
@@ -17,6 +18,8 @@ fn make_image(w: u32, h: u32) -> DynamicImage {
 
 fn bench_rotate(c: &mut Criterion) {
     let mut group = c.benchmark_group("rotate_image_buffer");
+    // 90° and 270° are ~334 ms/iter; need enough time to collect 100 samples
+    group.measurement_time(Duration::from_secs(35));
     let logical = Size {
         width: 1920,
         height: 1080,
