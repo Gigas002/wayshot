@@ -237,7 +237,6 @@ mod error_tests {
 
 #[cfg(test)]
 mod convert_tests {
-    #[allow(unused_imports)]
     use crate::convert::{Convert, create_converter};
     use image::ColorType;
     use wayland_client::protocol::wl_shm;
@@ -274,7 +273,7 @@ mod convert_tests {
 
     #[test]
     fn convert_none_produces_rgba8() {
-        let converter = create_converter(wl_shm::Format::Xbgr8888).unwrap();
+        let converter: Box<dyn Convert> = create_converter(wl_shm::Format::Xbgr8888).unwrap();
         let mut data = vec![0x11, 0x22, 0x33, 0x44];
         let out = converter.convert_inplace(&mut data);
         assert_eq!(out, ColorType::Rgba8);

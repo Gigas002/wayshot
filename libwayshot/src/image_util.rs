@@ -14,8 +14,10 @@ fn scaling_left(rotated_width: u32, logical_size: Size, max_scale: f64) -> f64 {
     scaling_left
 }
 
+/// Rotate and optionally scale an image according to Wayland output transform.
+/// Public for benchmarks (`bench` feature); otherwise use via crate internals.
 #[tracing::instrument(skip(image))]
-pub(crate) fn rotate_image_buffer(
+pub fn rotate_image_buffer(
     image: DynamicImage,
     transform: Transform,
     // Includes transform already.

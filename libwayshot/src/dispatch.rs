@@ -342,14 +342,7 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for CaptureFrameState {
                         return;
                     }
                 };
-                let device_i32 = match device.try_into() {
-                    Ok(d) => d,
-                    Err(_) => {
-                        tracing::warn!("Device ID {} does not fit in platform dev_t", device);
-                        return;
-                    }
-                };
-                let Ok(node) = DrmNode::from_dev_id(device_i32) else {
+                let Ok(node) = DrmNode::from_dev_id(device) else {
                     tracing::warn!("Failed to create DRM node from device ID: {}", device);
                     return;
                 };
