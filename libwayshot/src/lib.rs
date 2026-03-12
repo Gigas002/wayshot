@@ -30,6 +30,7 @@ use std::{
 
 use dispatch::{DMABUFState, LayerShellState};
 use image::DynamicImage;
+use image::imageops::replace;
 use memmap2::MmapMut;
 use screencopy::{
     DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard,
@@ -1405,33 +1406,13 @@ impl WayshotConnection {
                         let logical_region = frame_copy.logical_region;
                         let transform = frame_copy.transform;
                         let logical_size = logical_region.inner.size;
-                        // Perform in-place color conversion directly on the mmap buffer
-                        // to avoid cloning. Calling `get_image()` here would force an
-                        // immediate clone.
-                        let frame_color_type = frame_copy.convert_color_inplace()?;
-
-                        let image = match frame_color_type {
-                            image::ColorType::Rgba8 => {
-                                let image = frame_copy.into_mmap_rgba_image_buffer()?;
-                                image_util::prepare_mmap_rgba_image(
-                                    image,
-                                    transform,
-                                    logical_size,
-                                    max_scale,
-                                )
-                            }
-                            image::ColorType::Rgb8 => {
-                                let image: DynamicImage = (&frame_copy).try_into()?;
-                                image_util::PreparedImage::Dynamic(image_util::rotate_image_buffer(
-                                    image,
-                                    transform,
-                                    logical_size,
-                                    max_scale,
-                                ))
-                            }
-                            _ => return Err(Error::InvalidColor),
-                        };
-
+                        let image = frame_copy.get_image()?;
+                        let image = image_util::rotate_image_buffer(
+                            image,
+                            transform,
+                            logical_size,
+                            max_scale,
+                        );
                         Ok((image, logical_region))
                     })
                 })
@@ -1472,7 +1453,7 @@ impl WayshotConnection {
                             )
                             .in_scope(|| {
                                 tracing::debug!("Replacing parts of the final image");
-                                image.replace_into(&mut composite_image, x, y);
+                                replace(&mut composite_image, &image, x, y);
                             });
 
                             Ok(composite_image)
