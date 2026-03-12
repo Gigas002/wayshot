@@ -72,7 +72,7 @@ fn bench_vulkan_capture(c: &mut Criterion) {
         }
     };
 
-    let entry = match ash::Entry::load() {
+    let entry = match unsafe { ash::Entry::load() } {
         Ok(e) => e,
         Err(e) => {
             eprintln!("Vulkan bench skipped (Vulkan loader failed): {}", e);
