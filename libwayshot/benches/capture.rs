@@ -52,7 +52,6 @@ fn bench_egl_capture(_c: &mut Criterion) {}
 #[cfg(feature = "vulkan")]
 fn bench_vulkan_capture(c: &mut Criterion) {
     use ash::vk;
-    use ash::{Device, Instance};
     use std::os::fd::AsRawFd;
     use std::sync::Arc;
 
@@ -81,7 +80,7 @@ fn bench_vulkan_capture(c: &mut Criterion) {
         }
     };
 
-    let instance = match unsafe { Instance::new(&entry, &vk::InstanceCreateInfo::default(), None) }
+    let instance = match unsafe { entry.create_instance(&vk::InstanceCreateInfo::default(), None) }
     {
         Ok(i) => i,
         Err(e) => {
@@ -134,15 +133,20 @@ fn bench_vulkan_capture(c: &mut Criterion) {
     let fd_raw = fd.as_raw_fd();
 
     let khr_fd = ash::khr::external_memory_fd::Device::new(&instance, &device);
+    let mut memory_fd_props = vk::MemoryFdPropertiesKHR::default();
     let memory_type_index = match unsafe {
-        khr_fd.get_memory_fd_properties_khr(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT, fd_raw)
+        khr_fd.get_memory_fd_properties(
+            vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
+            fd_raw,
+            &mut memory_fd_props,
+        )
     } {
-        Ok(props) => {
-            let mask = props.memory_type_bits;
+        Ok(()) => {
+            let mask = memory_fd_props.memory_type_bits;
             (0..32).find(|i| (mask & (1u32 << i)) != 0).unwrap_or(0)
         }
         Err(e) => {
-            eprintln!("Vulkan bench: get_memory_fd_properties_khr failed: {:?}", e);
+            eprintln!("Vulkan bench: get_memory_fd_properties failed: {:?}", e);
             return;
         }
     };
