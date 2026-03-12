@@ -198,6 +198,258 @@ mod error_tests {
             _ => panic!("Expected Error::EGLError(khronos_egl::Error::ContextLost)"),
         }
     }
+
+    #[test]
+    fn test_display_framecopy_failed_with_reason() {
+        use wayland_client::WEnum;
+        use wayland_protocols::ext::image_copy_capture::v1::client::ext_image_copy_capture_frame_v1::FailureReason;
+        let reason = WEnum::<FailureReason>::Unknown(1);
+        let err = Error::FramecopyFailedWithReason(reason);
+        assert!(err.to_string().contains("framecopy failed with reason"));
+    }
+
+    #[test]
+    fn test_display_capture_failed() {
+        let err = Error::CaptureFailed("test capture error".to_string());
+        assert_eq!(err.to_string(), "Capture failed: test capture error");
+    }
+
+    #[test]
+    fn test_display_unsupported() {
+        let err = Error::Unsupported("reason".to_string());
+        assert_eq!(err.to_string(), "Unsupported for some reason: reason");
+    }
+
+    #[cfg(feature = "vulkan")]
+    #[test]
+    fn test_display_vulkan_error() {
+        let err = Error::VulkanError("test vulkan error".to_string());
+        assert_eq!(err.to_string(), "Vulkan error: test vulkan error");
+    }
+
+    #[cfg(feature = "egl")]
+    #[test]
+    fn test_display_egl_image_to_tex_proc_not_found() {
+        let err = Error::EGLImageToTexProcNotFoundError;
+        assert!(err.to_string().contains("EGLImageTargetTexture2DOES"));
+    }
+}
+
+#[cfg(test)]
+mod convert_tests {
+    use crate::convert::{create_converter, Convert};
+    use image::ColorType;
+    use wayland_client::protocol::wl_shm;
+
+    #[test]
+    fn create_converter_returns_none_for_unknown_format() {
+        // Argb2101010 is not in the supported list (we support Abgr2101010, Xbgr2101010)
+        let unsupported = wl_shm::Format::Argb2101010;
+        assert!(create_converter(unsupported).is_none());
+    }
+
+    #[test]
+    fn create_converter_xbgr8888_returns_some() {
+        assert!(create_converter(wl_shm::Format::Xbgr8888).is_some());
+        assert!(create_converter(wl_shm::Format::Abgr8888).is_some());
+    }
+
+    #[test]
+    fn create_converter_xrgb8888_returns_some() {
+        assert!(create_converter(wl_shm::Format::Xrgb8888).is_some());
+        assert!(create_converter(wl_shm::Format::Argb8888).is_some());
+    }
+
+    #[test]
+    fn create_converter_bgr10_returns_some() {
+        assert!(create_converter(wl_shm::Format::Xbgr2101010).is_some());
+        assert!(create_converter(wl_shm::Format::Abgr2101010).is_some());
+    }
+
+    #[test]
+    fn create_converter_bgr888_returns_some() {
+        assert!(create_converter(wl_shm::Format::Bgr888).is_some());
+    }
+
+    #[test]
+    fn convert_none_produces_rgba8() {
+        let converter = create_converter(wl_shm::Format::Xbgr8888).unwrap();
+        let mut data = vec![0x11, 0x22, 0x33, 0x44];
+        let out = converter.convert_inplace(&mut data);
+        assert_eq!(out, ColorType::Rgba8);
+        assert_eq!(data, vec![0x11, 0x22, 0x33, 0x44]);
+    }
+
+    #[test]
+    fn convert_rgb8_swaps_r_and_b() {
+        let converter = create_converter(wl_shm::Format::Xrgb8888).unwrap();
+        let mut data = vec![0x11, 0x22, 0x33, 0x44];
+        let out = converter.convert_inplace(&mut data);
+        assert_eq!(out, ColorType::Rgba8);
+        assert_eq!(data[0], 0x33);
+        assert_eq!(data[1], 0x22);
+        assert_eq!(data[2], 0x11);
+        assert_eq!(data[3], 0x44);
+    }
+
+    #[test]
+    fn convert_rgb8_multiple_pixels() {
+        let converter = create_converter(wl_shm::Format::Argb8888).unwrap();
+        let mut data = vec![
+            0x11, 0x22, 0x33, 0x44,
+            0xaa, 0xbb, 0xcc, 0xdd,
+        ];
+        converter.convert_inplace(&mut data);
+        assert_eq!(data[0], 0x33);
+        assert_eq!(data[2], 0x11);
+        assert_eq!(data[4], 0xcc);
+        assert_eq!(data[6], 0xaa);
+    }
+
+    #[test]
+    fn convert_bgr10_produces_rgba8() {
+        let converter = create_converter(wl_shm::Format::Abgr2101010).unwrap();
+        let mut data = vec![0x00, 0x00, 0x00, 0xFF];
+        let out = converter.convert_inplace(&mut data);
+        assert_eq!(out, ColorType::Rgba8);
+        assert_eq!(data[3], 255);
+    }
+
+    #[test]
+    fn convert_bgr888_produces_rgb8() {
+        let converter = create_converter(wl_shm::Format::Bgr888).unwrap();
+        let mut data = vec![0x01, 0x02, 0x03];
+        let out = converter.convert_inplace(&mut data);
+        assert_eq!(out, ColorType::Rgb8);
+    }
+}
+
+#[cfg(test)]
+mod screencopy_tests {
+    use crate::region::Size;
+    use crate::screencopy::FrameFormat;
+    use wayland_client::protocol::wl_shm;
+
+    #[test]
+    fn frame_format_byte_size() {
+        let format = FrameFormat {
+            format: wl_shm::Format::Argb8888,
+            size: Size { width: 100, height: 200 },
+            stride: 400,
+        };
+        assert_eq!(format.byte_size(), 400 * 200);
+    }
+
+    #[test]
+    fn frame_format_byte_size_small() {
+        let format = FrameFormat {
+            format: wl_shm::Format::Xrgb8888,
+            size: Size { width: 2, height: 2 },
+            stride: 8,
+        };
+        assert_eq!(format.byte_size(), 16);
+    }
+}
+
+#[cfg(test)]
+mod image_util_tests {
+    use crate::image_util::rotate_image_buffer;
+    use crate::region::Size;
+    use image::{DynamicImage, ImageBuffer, RgbaImage};
+    use wayland_client::protocol::wl_output::Transform;
+
+    fn make_image(w: u32, h: u32) -> DynamicImage {
+        let buf: RgbaImage = ImageBuffer::from_raw(w, h, (0..w * h * 4).map(|i| i as u8).collect()).unwrap();
+        DynamicImage::ImageRgba8(buf)
+    }
+
+    #[test]
+    fn rotate_image_buffer_normal_unchanged() {
+        let image = make_image(10, 20);
+        let logical_size = Size { width: 10, height: 20 };
+        let out = rotate_image_buffer(image, Transform::Normal, logical_size, 2.0);
+        assert_eq!(out.width(), 10);
+        assert_eq!(out.height(), 20);
+    }
+
+    #[test]
+    fn rotate_image_buffer_90_swaps_dimensions() {
+        let image = make_image(10, 20);
+        let logical_size = Size { width: 10, height: 20 };
+        let out = rotate_image_buffer(image, Transform::_90, logical_size, 2.0);
+        assert_eq!(out.width(), 20);
+        assert_eq!(out.height(), 10);
+    }
+
+    #[test]
+    fn rotate_image_buffer_180_same_dimensions() {
+        let image = make_image(8, 6);
+        let logical_size = Size { width: 8, height: 6 };
+        let out = rotate_image_buffer(image, Transform::_180, logical_size, 1.0);
+        assert_eq!(out.width(), 8);
+        assert_eq!(out.height(), 6);
+    }
+
+    #[test]
+    fn rotate_image_buffer_270_swaps_dimensions() {
+        let image = make_image(12, 14);
+        let logical_size = Size { width: 12, height: 14 };
+        let out = rotate_image_buffer(image, Transform::_270, logical_size, 1.0);
+        assert_eq!(out.width(), 14);
+        assert_eq!(out.height(), 12);
+    }
+
+    #[test]
+    fn rotate_image_buffer_flipped_same_dimensions() {
+        let image = make_image(5, 5);
+        let logical_size = Size { width: 5, height: 5 };
+        let out = rotate_image_buffer(image, Transform::Flipped, logical_size, 1.0);
+        assert_eq!(out.width(), 5);
+        assert_eq!(out.height(), 5);
+    }
+}
+
+#[cfg(all(test, feature = "vulkan"))]
+mod vulkan_tests {
+    use crate::vulkan::drm_fourcc_to_vk_format;
+    use ash::vk;
+
+    #[test]
+    fn drm_fourcc_ar24_maps_to_b8g8r8a8_unorm() {
+        let f = drm_fourcc_to_vk_format(0x34325241).unwrap(); // AR24 = ARGB8888
+        assert_eq!(f, vk::Format::B8G8R8A8_UNORM);
+    }
+
+    #[test]
+    fn drm_fourcc_xr24_maps_to_b8g8r8a8_unorm() {
+        let f = drm_fourcc_to_vk_format(0x34325258).unwrap(); // XR24 = XRGB8888
+        assert_eq!(f, vk::Format::B8G8R8A8_UNORM);
+    }
+
+    #[test]
+    fn drm_fourcc_ab24_maps_to_b8g8r8a8_unorm() {
+        let f = drm_fourcc_to_vk_format(0x34324241).unwrap(); // AB24 = ABGR8888
+        assert_eq!(f, vk::Format::B8G8R8A8_UNORM);
+    }
+
+    #[test]
+    fn drm_fourcc_xb24_maps_to_b8g8r8a8_unorm() {
+        let f = drm_fourcc_to_vk_format(0x34324258).unwrap(); // XB24 = XBGR8888
+        assert_eq!(f, vk::Format::B8G8R8A8_UNORM);
+    }
+
+    #[test]
+    fn drm_fourcc_rr24_maps_to_r8g8b8_unorm() {
+        let f = drm_fourcc_to_vk_format(0x30335252).unwrap(); // RR24 (RGB888)
+        assert_eq!(f, vk::Format::R8G8B8_UNORM);
+    }
+
+    #[test]
+    fn drm_fourcc_unknown_returns_error() {
+        let err = drm_fourcc_to_vk_format(0xdeadbeef).unwrap_err();
+        assert!(err.to_string().contains("Vulkan error"));
+        assert!(err.to_string().contains("0xdeadbeef"));
+    }
 }
 
 #[cfg(all(test, unix))]
@@ -360,6 +612,105 @@ mod output_tests {
         assert_eq!(o1.logical_region, o2.logical_region);
         mem::forget(o1);
         mem::forget(o2);
+    }
+
+    #[test]
+    fn physical_size_returns_physical_size() {
+        let output_info = make_output_info(
+            "DP-1",
+            "Display",
+            Size { width: 3840, height: 2160 },
+            LogicalRegion {
+                inner: Region {
+                    position: Position { x: 100, y: 50 },
+                    size: Size { width: 1920, height: 1080 },
+                },
+            },
+        );
+        let phys = output_info.physical_size();
+        assert_eq!(phys.width, 3840);
+        assert_eq!(phys.height, 2160);
+        mem::forget(output_info);
+    }
+
+    #[test]
+    fn logical_size_returns_logical_size() {
+        let output_info = make_output_info(
+            "eDP-1",
+            "Display",
+            Size { width: 1920, height: 1080 },
+            LogicalRegion {
+                inner: Region {
+                    position: Position { x: 0, y: 0 },
+                    size: Size { width: 960, height: 540 },
+                },
+            },
+        );
+        let log_size = output_info.logical_size();
+        assert_eq!(log_size.width, 960);
+        assert_eq!(log_size.height, 540);
+        mem::forget(output_info);
+    }
+
+    #[test]
+    fn logical_position_returns_position() {
+        let output_info = make_output_info(
+            "HDMI-1",
+            "Display",
+            Size { width: 1920, height: 1080 },
+            LogicalRegion {
+                inner: Region {
+                    position: Position { x: -100, y: 200 },
+                    size: Size { width: 1920, height: 1080 },
+                },
+            },
+        );
+        let pos = output_info.logical_position();
+        assert_eq!(pos.x, -100);
+        assert_eq!(pos.y, 200);
+        mem::forget(output_info);
+    }
+
+    #[test]
+    fn wayshot_target_from_output_info() {
+        use crate::WayshotTarget;
+        let output_info = make_output_info(
+            "HDMI-1",
+            "Display",
+            Size { width: 1920, height: 1080 },
+            LogicalRegion {
+                inner: Region {
+                    position: Position { x: 0, y: 0 },
+                    size: Size { width: 1920, height: 1080 },
+                },
+            },
+        );
+        let target = WayshotTarget::from(output_info);
+        match &target {
+            crate::WayshotTarget::Screen(wl_output) => {
+                assert!(wl_output.as_ref().version() >= 0);
+            }
+            crate::WayshotTarget::Toplevel(_) => panic!("Expected Screen variant"),
+        }
+        mem::forget(target);
+    }
+
+    #[test]
+    fn output_info_as_ref_returns_wl_output() {
+        let output_info = make_output_info(
+            "HDMI-1",
+            "Display",
+            Size { width: 1920, height: 1080 },
+            LogicalRegion {
+                inner: Region {
+                    position: Position { x: 0, y: 0 },
+                    size: Size { width: 1920, height: 1080 },
+                },
+            },
+        );
+        let wl_ref = output_info.as_ref();
+        assert!(std::ptr::eq(wl_ref, &output_info.wl_output));
+        mem::forget(output_info);
     }
 }
 
@@ -531,5 +882,105 @@ mod region_tests {
             Error::NoOutputs => {}
             _ => panic!("expected Error::NoOutputs"),
         }
+    }
+
+    #[test]
+    fn position_size_region_logical_region_default() {
+        let pos = Position::default();
+        assert_eq!(pos.x, 0);
+        assert_eq!(pos.y, 0);
+
+        let size = Size::default();
+        assert_eq!(size.width, 0);
+        assert_eq!(size.height, 0);
+
+        let region = Region::default();
+        assert_eq!(region.position, pos);
+        assert_eq!(region.size, size);
+
+        let logical = LogicalRegion::default();
+        assert_eq!(logical.inner, region);
+    }
+
+    #[test]
+    fn embedded_region_exact_fit() {
+        let viewport = LogicalRegion {
+            inner: Region {
+                position: Position { x: 10, y: 20 },
+                size: Size { width: 100, height: 50 },
+            },
+        };
+        let relative_to = LogicalRegion {
+            inner: Region {
+                position: Position { x: 10, y: 20 },
+                size: Size { width: 100, height: 50 },
+            },
+        };
+        let embedded = EmbeddedRegion::new(viewport, relative_to).expect("exact fit");
+        assert_eq!(embedded.inner.position.x, 0);
+        assert_eq!(embedded.inner.position.y, 0);
+        assert_eq!(embedded.inner.size.width, 100);
+        assert_eq!(embedded.inner.size.height, 50);
+    }
+
+    #[test]
+    fn embedded_region_fully_inside() {
+        let viewport = LogicalRegion {
+            inner: Region {
+                position: Position { x: 5, y: 5 },
+                size: Size { width: 10, height: 10 },
+            },
+        };
+        let relative_to = LogicalRegion {
+            inner: Region {
+                position: Position { x: 0, y: 0 },
+                size: Size { width: 100, height: 100 },
+            },
+        };
+        let embedded = EmbeddedRegion::new(viewport, relative_to).expect("fully inside");
+        assert_eq!(embedded.inner.position.x, 5);
+        assert_eq!(embedded.inner.position.y, 5);
+        assert_eq!(embedded.inner.size.width, 10);
+        assert_eq!(embedded.inner.size.height, 10);
+    }
+
+    #[test]
+    fn logical_region_from_output_ref() {
+        let output = make_output(
+            "primary",
+            Position { x: 42, y: 43 },
+            Size { width: 1920, height: 1080 },
+        );
+        let logical = LogicalRegion::from(&output);
+        assert_eq!(logical.inner.position.x, 42);
+        assert_eq!(logical.inner.position.y, 43);
+        assert_eq!(logical.inner.size.width, 1920);
+        assert_eq!(logical.inner.size.height, 1080);
+        mem::forget(output);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod dispatch_tests {
+    use crate::dispatch::{CaptureFrameState, Card};
+
+    #[test]
+    fn card_open_nonexistent_path_errors() {
+        let err = Card::open("/nonexistent/dri/renderD999").unwrap_err();
+        assert!(err.kind() == std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn capture_frame_state_new_with_gbm() {
+        let state = CaptureFrameState::new(true);
+        assert!(state.formats.is_empty());
+        assert!(state.dmabuf_formats.is_empty());
+    }
+
+    #[test]
+    fn capture_frame_state_new_without_gbm() {
+        let state = CaptureFrameState::new(false);
+        assert!(state.formats.is_empty());
+        assert!(state.dmabuf_formats.is_empty());
     }
 }

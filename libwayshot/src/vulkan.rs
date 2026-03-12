@@ -79,7 +79,7 @@ impl Drop for VulkanImageGuard {
 }
 
 /// Map DRM fourcc to VkFormat for common compositor formats.
-fn drm_fourcc_to_vk_format(fourcc: u32) -> Result<vk::Format> {
+pub(crate) fn drm_fourcc_to_vk_format(fourcc: u32) -> Result<vk::Format> {
     // DRM fourcc codes (little-endian): AR24, XR24, AB24, XB24, etc.
     let vk_format = match fourcc {
         0x34325241 => vk::Format::B8G8R8A8_UNORM, // AR24 = ARGB8888
