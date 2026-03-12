@@ -47,6 +47,8 @@ fn bench_convert(c: &mut Criterion) {
     use wayland_client::protocol::wl_shm;
 
     let mut group = c.benchmark_group("convert_inplace");
+    // xrgb8888 / bgr10 need a bit over 5s for 100 samples
+    group.measurement_time(Duration::from_secs(10));
     let size = 1920 * 1080 * 4;
     let mut data = vec![0u8; size];
 
