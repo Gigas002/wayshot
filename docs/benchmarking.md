@@ -13,13 +13,13 @@ From the repo root:
 cargo bench -p libwayshot --features bench -- image_ops
 
 # EGL capture (needs a Wayland session + DRI device)
-cargo bench -p libwayshot --features egl -- capture
+cargo bench -p libwayshot --features "bench,egl" -- capture
 
 # Vulkan capture (needs Wayland + DRI + Vulkan driver)
-cargo bench -p libwayshot --features vulkan -- capture
+cargo bench -p libwayshot --features "bench,vulkan" -- capture
 
-# EGL vs Vulkan in one run (build with both features, then run capture bench)
-cargo bench -p libwayshot --features "egl,vulkan" -- capture
+# Run every benchmark
+cargo bench -p libwayshot --features "bench,egl,vulkan" --no-fail-fast --bench image_ops --bench capture
 ```
 
 ## What is benchmarked?
@@ -42,9 +42,9 @@ Each capture benchmark measures **time per frame** (roundtrip to compositor + bu
 
 1. **Wayland session** – run inside Sway, Hyprland, River, etc. `WAYLAND_DISPLAY` must be set.
 2. **DRI device** – e.g. `/dev/dri/renderD128`. Override with:
-   ```bash
-   export LIBWAYSHOT_DRI_DEVICE=/dev/dri/card0
-   ```
+    ```bash
+    export LIBWAYSHOT_DRI_DEVICE=/dev/dri/card0
+    ```
 3. **Vulkan (Vulkan bench only)** – Mesa Vulkan driver or other Vulkan ICD. The bench creates a minimal Vulkan device with `VK_KHR_external_memory_fd` and `VK_EXT_external_memory_dma_buf`.
 
 If connection or GPU setup fails, the capture benchmarks are skipped and a short message is printed.
@@ -53,38 +53,28 @@ If connection or GPU setup fails, the capture benchmarks are skipped and a short
 
 1. Build with both backends and run the capture bench once:
 
-   ```bash
-   cargo bench -p libwayshot --features "egl,vulkan" -- capture --save-baseline egl-vs-vulkan
-   ```
+    ```bash
+    cargo bench -p libwayshot --features "egl,vulkan" -- capture --save-baseline egl-vs-vulkan
+    ```
 
 2. Open the Criterion report (printed at the end, e.g. `target/criterion/report/index.html`) and compare:
-   - **`capture_egl/capture_target_frame_eglimage`**
-   - **`capture_vulkan/capture_target_frame_vk_image`**
+    - **`capture_egl/capture_target_frame_eglimage`**
+    - **`capture_vulkan/capture_target_frame_vk_image`**
 
-   The report shows mean time per iteration and confidence intervals.
+    The report shows mean time per iteration and confidence intervals.
 
 3. Optional: compare two runs (e.g. before/after a change):
 
-   ```bash
-   cargo bench -p libwayshot --features "egl,vulkan" -- capture --baseline egl-vs-vulkan
-   # ... make changes ...
-   cargo bench -p libwayshot --features "egl,vulkan" -- capture --baseline egl-vs-vulkan
-   ```
+    ```bash
+    cargo bench -p libwayshot --features "egl,vulkan" -- capture --baseline egl-vs-vulkan
+    # ... make changes ...
+    cargo bench -p libwayshot --features "egl,vulkan" -- capture --baseline egl-vs-vulkan
+    ```
 
-   Criterion will print a diff between the two baselines.
+    Criterion will print a diff between the two baselines.
 
 ## Interpreting results
 
 - **Time (ms)** – average time for one capture. Includes Wayland roundtrip and GPU buffer creation.
 - **Difference** – when using baselines, positive % means slower, negative % means faster.
 - Capture benchmarks use a small sample size and 10s measurement time; for stable numbers run multiple times or increase `--measurement-time`.
-
-## All benchmark commands (cheat sheet)
-
-| Goal                         | Command                                                                 |
-|-----------------------------|-------------------------------------------------------------------------|
-| Image ops only              | `cargo bench -p libwayshot --features bench -- image_ops`               |
-| EGL capture only            | `cargo bench -p libwayshot --features egl -- capture`                   |
-| Vulkan capture only        | `cargo bench -p libwayshot --features vulkan -- capture`                |
-| EGL + Vulkan in one report  | `cargo bench -p libwayshot --features "egl,vulkan" -- capture`          |
-| List all benchmarks         | `cargo bench -p libwayshot --features "bench,egl,vulkan"` (no filter)   |

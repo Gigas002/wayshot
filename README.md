@@ -17,7 +17,6 @@
 
 [xdg-desktop-portal-luminous](https://github.com/waycrate/xdg-desktop-portal-luminous) is a xdg-desktop-portal backend for wlroots based compositors, providing screenshot and screencast capabilities.
 
-
 # Some usage examples:
 
 NOTE: Read `man 7 wayshot` for more examples.
@@ -28,15 +27,19 @@ NOTE: Read `man wayshot` for flag information.
 
 Screenshot and crop region:
 
-*Interactive selection* (requires *selector* feature):
+_Interactive selection_ (requires _selector_ feature):
 
-	wayshot -g
+```bash
+wayshot -g
+```
 
-*Region from a geometry string* (e.g. slurp, grim-style; works with or without *selector*):
+_Region from a geometry string_ (e.g. slurp, grim-style; works with or without _selector_):
 
-	wayshot -g "$(slurp)"
+```bash
+wayshot -g "$(slurp)"
+```
 
-Format: *x*,*y* *width*x*height* (e.g. *100,200 300x400*).
+Format: _x_,_y_ *width*x*height* (e.g. _100,200 300x400_).
 
 Fullscreen:
 
@@ -90,17 +93,17 @@ features can be selectively disabled:
 cargo build --no-default-features --features clipboard,logger,notifications
 ```
 
-| Feature        | What it adds                                          | Extra dependency      |
-|----------------|-------------------------------------------------------|-----------------------|
-| `egl`          | EGL/OpenGL capture backend (default)                  | gl, r-egl-wayland     |
-| `vulkan`       | Vulkan capture backend (alternative to EGL)           | ash                   |
-| `avif`         | AVIF encoding (`--encoding avif`)                     | rav1e (via image)     |
-| `clipboard`    | `--clipboard` flag, copy to Wayland clipboard         | wl-clipboard-rs       |
-| `color_picker` | `--color` flag, freeze screen and pick a pixel color  | —                     |
-| `jxl`          | JPEG-XL encoding (`--encoding jxl`)                   | libjxl / jpegxl-rs    |
-| `logger`       | `--log-level` flag, tracing output to stderr          | tracing-subscriber    |
-| `notifications`| Desktop notifications after each capture              | notify-rust           |
-| `selector`     | *-g* without value: interactive region selection; *-g* with value: geometry string (e.g. *$(slurp)*) always supported | libwaysip             |
+| Feature         | What it adds                                                                                                          | Extra dependency   |
+| --------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `egl`           | EGL/OpenGL capture backend (default)                                                                                  | gl, r-egl-wayland  |
+| `vulkan`        | Vulkan capture backend (alternative to EGL)                                                                           | ash                |
+| `avif`          | AVIF encoding (`--encoding avif`)                                                                                     | rav1e (via image)  |
+| `clipboard`     | `--clipboard` flag, copy to Wayland clipboard                                                                         | wl-clipboard-rs    |
+| `color_picker`  | `--color` flag, freeze screen and pick a pixel color                                                                  | —                  |
+| `jxl`           | JPEG-XL encoding (`--encoding jxl`)                                                                                   | libjxl / jpegxl-rs |
+| `logger`        | `--log-level` flag, tracing output to stderr                                                                          | tracing-subscriber |
+| `notifications` | Desktop notifications after each capture                                                                              | notify-rust        |
+| `selector`      | _-g_ without value: interactive region selection; _-g_ with value: geometry string (e.g. _$(slurp)_) always supported | libwaysip          |
 
 # Benchmarking
 
@@ -132,18 +135,18 @@ Alternatively, set `stdout = true` in your config file to always write to stdout
 
 ## Compile time dependencies:
 
--   scdoc (If present, man-pages will be generated.)
--   rustup
--   make
--   pkg-config
--   libjxl _(optional — only needed when the `jxl` feature is enabled)_
+- scdoc (If present, man-pages will be generated.)
+- rustup
+- make
+- pkg-config
+- libjxl _(optional — only needed when the `jxl` feature is enabled)_
 
 ## Compiling:
 
--   `git clone https://github.com/waycrate/wayshot && cd wayshot`
--   `make setup`
--   `make`
--   `sudo make install`
+- `git clone https://github.com/waycrate/wayshot && cd wayshot`
+- `make setup`
+- `make`
+- `sudo make install`
 
 # Support:
 
