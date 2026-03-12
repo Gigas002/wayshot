@@ -19,7 +19,16 @@ repository.workspace = true
 #
 #   cargo build --no-default-features --features clipboard
 #
-default = ["avif", "clipboard", "color_picker", "jxl", "logger", "notifications", "selector"]
+# GPU capture backend: use EGL/OpenGL (default) or Vulkan. Only one is needed for the
+# current CLI; choose "vulkan" to avoid EGL/GL dependencies.
+default = ["avif", "clipboard", "color_picker", "egl", "jxl", "logger", "notifications", "selector"]
+
+# Use libwayshot's EGL/OpenGL path (default). Enables capture_target_frame_eglimage, etc.
+egl = ["libwayshot/egl"]
+
+# Use libwayshot's Vulkan path instead of EGL. Use with --no-default-features --features vulkan,...
+# to build without EGL/GL (e.g. for a Vulkan-only environment).
+vulkan = ["libwayshot/vulkan"]
 
 # Copies the screenshot to the Wayland clipboard via wl-clipboard-rs.
 # The image is served by a forked child process so it persists after wayshot exits.
