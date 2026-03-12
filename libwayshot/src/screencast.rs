@@ -1,4 +1,4 @@
-use std::os::fd::{AsFd, IntoRawFd};
+use std::os::fd::AsFd;
 
 use gbm::{BufferObject, BufferObjectFlags};
 use wayland_client::{

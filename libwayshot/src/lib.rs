@@ -22,7 +22,7 @@ mod tests;
 use std::{
     collections::HashSet,
     fs::File,
-    os::fd::{AsFd, IntoRawFd},
+    os::fd::AsFd,
     path::Path,
     sync::atomic::Ordering,
     thread,

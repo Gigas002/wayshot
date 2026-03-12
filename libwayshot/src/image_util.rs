@@ -3,13 +3,6 @@ use wayland_client::protocol::wl_output::Transform;
 
 use crate::region::Size;
 
-fn transformed_width(width: u32, height: u32, transform: Transform) -> u32 {
-    match transform {
-        Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270 => height,
-        _ => width,
-    }
-}
-
 fn scaling_left(rotated_width: u32, logical_size: Size, max_scale: f64) -> f64 {
     tracing::trace!(
         "Rotated width: {rotated_width}, logical width: {}",
