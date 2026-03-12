@@ -17,11 +17,13 @@ webp = ["image/webp"]
 avif = ["image/avif"]
 egl = ["dep:gl", "dep:r-egl-wayland"]
 vulkan = ["dep:ash"]
+# Expose internal image/convert APIs for benchmarks only. Not part of stable API.
+bench = []
 
 [dependencies]
 tracing.workspace = true
 image.workspace = true
-memmap2 = "0.9.5"
+memmap2 = "0.9"
 rustix = { workspace = true, features = ["fs", "shm"] }
 thiserror.workspace = true
 
@@ -31,12 +33,23 @@ wayland-protocols = { workspace = true, features = [
 	"staging",
 	"unstable",
 ] }
-wayland-protocols-wlr = { version = "0.3.10", features = ["client"] }
-wayland-backend = { version = "0.3.10", features = ["client_system"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+wayland-backend = { version = "0.3", features = ["client_system"] }
 
-gbm = "0.18.0"
-drm = "0.14.1"
+gbm = "0.18"
+drm = "0.14"
 
 gl = { workspace = true, optional = true }
 r-egl-wayland = { workspace = true, optional = true }
 ash = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "image_ops"
+harness = false
+
+[[bench]]
+name = "capture"
+harness = false
