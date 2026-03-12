@@ -28,9 +28,15 @@ NOTE: Read `man wayshot` for flag information.
 
 Screenshot and crop region:
 
-```bash
-wayshot -g
-```
+*Interactive selection* (requires *selector* feature):
+
+	wayshot -g
+
+*Region from a geometry string* (e.g. slurp, grim-style; works with or without *selector*):
+
+	wayshot -g "$(slurp)"
+
+Format: *x*,*y* *width*x*height* (e.g. *100,200 300x400*).
 
 Fullscreen:
 
@@ -92,7 +98,7 @@ cargo build --no-default-features --features clipboard,logger,notifications
 | `jxl`          | JPEG-XL encoding (`--encoding jxl`)                   | libjxl / jpegxl-rs    |
 | `logger`       | `--log-level` flag, tracing output to stderr          | tracing-subscriber    |
 | `notifications`| Desktop notifications after each capture              | notify-rust           |
-| `selector`     | `--geometry` flag, interactive region selection       | libwaysip             |
+| `selector`     | *-g* without value: interactive region selection; *-g* with value: geometry string (e.g. *$(slurp)*) always supported | libwaysip             |
 
 # Benchmarking
 

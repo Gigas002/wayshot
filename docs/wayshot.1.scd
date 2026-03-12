@@ -50,12 +50,20 @@ Wayshot - Screenshot tool for compositors implementing zwlr_screencopy_v1 such a
 
 ## Capture target (what to capture)
 
-*-g*, *--geometry*
-	Interactively select a screen region. By default the screen is frozen before the selection
-	overlay is shown, giving a stable view for precise selection. Use *--no-freeze* to select on
-	the live display and capture after selection.
+*-g* [*GEOMETRY*],
+*--geometry* [*GEOMETRY*]
+	Capture a screen region. Optional *GEOMETRY* argument:
 
-	_Requires the_ *selector* _feature (enabled by default)._
+	*With no argument*
+		Interactively select the region using the waysip overlay. The screen is frozen before the
+		selection overlay by default; use *--no-freeze* to select on the live display.
+
+		_Requires the_ *selector* _feature (enabled by default)._
+
+	*With *GEOMETRY* argument*
+		Use a geometry string in slurp/grim format: *x*,*y* *width*x*height* (e.g. *100,200 300x400*).
+		Compatible with tools like slurp: *wayshot -g "$(slurp)"*. Does not require the *selector*
+		feature.
 
 *-o*, *--output <OUTPUT>*
 	Capture a specific output/display by name. Use *--list-outputs* to discover names.
