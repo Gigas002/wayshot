@@ -8,7 +8,6 @@ authors = ["Shinyzenith <https://aakash.is-a.dev>"]
 homepage = "https://waycrate.github.io"
 description = "Screenshot crate for wlroots based compositors implementing the zwlr_screencopy_v1 protocol."
 keywords = ["screenshot", "wayland", "wlroots", "wayshot"]
-license = "BSD-2-Clause"
 repository = "https://github.com/waycrate/wayshot"
 version = "1.4.6"
 edition = "2024"
@@ -17,7 +16,7 @@ edition = "2024"
 libwayshot = { version = "0.7.3", path = "./libwayshot" }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-r-egl-wayland = "0.7.1"
+r-egl-wayland = "0.7"
 rustix = "1.1"
 thiserror = "2"
 image = { version = "0.25", default-features = false }
