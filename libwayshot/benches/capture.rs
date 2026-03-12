@@ -6,8 +6,9 @@
 //! - EGL: build with `--features egl` (default).
 //! - Vulkan: build with `--features vulkan`. Needs a Vulkan driver and the same Wayland/DRI setup.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use libwayshot::{WayshotConnection, WayshotTarget};
+use std::hint::black_box;
 use std::time::Duration;
 use wayland_client::Connection;
 

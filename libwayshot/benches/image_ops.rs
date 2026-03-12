@@ -1,13 +1,13 @@
 //! Benchmarks for image operations (rotation, color conversion).
 //! These run without a Wayland compositor.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use image::{DynamicImage, ImageBuffer, RgbaImage};
+use std::hint::black_box;
 use wayland_client::protocol::wl_output::Transform;
 
 use libwayshot::region::Size;
-use libwayshot::rotate_image_buffer;
-use libwayshot::{Convert, create_converter};
+use libwayshot::{create_converter, rotate_image_buffer};
 
 fn make_image(w: u32, h: u32) -> DynamicImage {
     let buf: RgbaImage =

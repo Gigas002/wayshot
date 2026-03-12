@@ -57,7 +57,7 @@ jobs:
 
     - name: Run benchmarks
       run: |
-        cargo bench -p libwayshot --features "bench,egl" --no-fail-fast -- --noplot 2>&1 | tee bench-output.txt
+        cargo bench -p libwayshot --features "bench,egl" --no-fail-fast --bench image_ops --bench capture -- --noplot 2>&1 | tee bench-output.txt
 
     - name: Upload benchmark report
       uses: actions/upload-artifact@v4
