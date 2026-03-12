@@ -92,6 +92,8 @@ cargo build --no-default-features --features clipboard,logger,notifications
 
 | Feature        | What it adds                                          | Extra dependency      |
 |----------------|-------------------------------------------------------|-----------------------|
+| `egl`          | EGL/OpenGL capture backend (default)                  | gl, r-egl-wayland     |
+| `vulkan`       | Vulkan capture backend (alternative to EGL)           | ash                   |
 | `avif`         | AVIF encoding (`--encoding avif`)                     | rav1e (via image)     |
 | `clipboard`    | `--clipboard` flag, copy to Wayland clipboard         | wl-clipboard-rs       |
 | `color_picker` | `--color` flag, freeze screen and pick a pixel color  | —                     |
