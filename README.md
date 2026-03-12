@@ -63,6 +63,12 @@ Interactively choose a window to capture:
 wayshot --choose-toplevel
 ```
 
+Screenshot after a delay (e.g. 1 second):
+
+```bash
+wayshot --delay 1000
+```
+
 Pick a hex color code, using ImageMagick:
 
 ```bash

@@ -80,6 +80,10 @@ pub struct Cli {
     #[arg(long)]
     pub no_freeze: bool,
 
+    /// Wait this many milliseconds before taking the screenshot. No delay when unset.
+    #[arg(long, value_name = "MS")]
+    pub delay: Option<u32>,
+
     // ─── Output options (where/how to save the image) ─────────────────────────
     /// Image encoding format. Defaults to the FILE extension, then to `png`.
     #[arg(
