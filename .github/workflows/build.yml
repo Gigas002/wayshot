@@ -106,11 +106,11 @@ jobs:
 
     - name: Generate coverage report (libwayshot)
       run: |
-        cargo llvm-cov --all-features -p libwayshot --exclude waymirror-egl --lcov --output-path lcov-libwayshot.info
+        cargo llvm-cov --all-features -p libwayshot --lcov --output-path lcov-libwayshot.info
 
     - name: Generate coverage report (wayshot)
       run: |
-        cargo llvm-cov --all-features -p wayshot --exclude waymirror-egl --lcov --output-path lcov-wayshot.info
+        cargo llvm-cov --all-features -p wayshot --lcov --output-path lcov-wayshot.info
 
     - name: Upload libwayshot coverage to Codecov
       uses: codecov/codecov-action@v5
