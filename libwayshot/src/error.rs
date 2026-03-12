@@ -50,6 +50,9 @@ pub enum Error {
     EGLError(#[from] egl::Error),
     #[error("No EGLImageTargetTexture2DOES function located, this extension may not be supported")]
     EGLImageToTexProcNotFoundError,
+    #[cfg(feature = "vulkan")]
+    #[error("Vulkan error: {0}")]
+    VulkanError(String),
     #[error("Capture failed: {0}")]
     CaptureFailed(String),
     #[error("Unsupported for some reason: {0}")]

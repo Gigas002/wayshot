@@ -15,6 +15,7 @@ jpeg = ["image/jpeg"]
 qoi = ["image/qoi"]
 webp = ["image/webp"]
 avif = ["image/avif"]
+vulkan = ["dep:ash"]
 
 [dependencies]
 tracing.workspace = true
@@ -37,3 +38,4 @@ drm = "0.14.1"
 
 gl.workspace = true
 r-egl-wayland.workspace = true
+ash = { workspace = true, optional = true }

@@ -11,6 +11,8 @@ pub mod output;
 pub mod region;
 pub mod screencast;
 mod screencopy;
+#[cfg(feature = "vulkan")]
+mod vulkan;
 
 use std::{
     collections::HashSet,
@@ -82,6 +84,9 @@ pub use crate::{
     output::OutputInfo,
     region::{EmbeddedRegion, LogicalRegion, RegionCapturer, Size, TopLevel},
 };
+
+#[cfg(feature = "vulkan")]
+pub use crate::vulkan::{VulkanCaptureContext, VulkanImageGuard};
 
 pub use crate::error::{Error, Result};
 
@@ -589,6 +594,34 @@ impl WayshotConnection {
                 }
             }
         }
+    }
+
+    /// Obtain a screencapture as a Vulkan image (VkImage) for use in Vulkan pipelines.
+    ///
+    /// This is the Vulkan analogue of [`capture_target_frame_eglimage`](Self::capture_target_frame_eglimage).
+    /// Uses the DMA-BUF path and imports the buffer into a VkImage via the given context.
+    /// The device in `context` must support `VK_EXT_external_memory_dma_buf` and `VK_KHR_external_memory_fd`.
+    ///
+    /// # Parameters
+    /// - `context`: Vulkan context (device, queue, memory type index for DMA-BUF import).
+    /// - `target`: Reference to the [WayshotTarget] from which the frame is to be captured.
+    /// - `cursor_overlay`: Whether to include the cursor in the capture.
+    /// - `capture_region`: Optional sub-area to capture; `None` for full target.
+    ///
+    /// # Returns
+    /// A [`VulkanImageGuard`] holding the VkImage and image view. Use [`VulkanImageGuard::image`]
+    /// and [`VulkanImageGuard::image_view`] in your Vulkan descriptor sets and pipelines.
+    #[cfg(feature = "vulkan")]
+    pub fn capture_target_frame_vk_image(
+        &self,
+        context: &crate::VulkanCaptureContext,
+        target: &WayshotTarget,
+        cursor_overlay: bool,
+        capture_region: Option<EmbeddedRegion>,
+    ) -> Result<crate::VulkanImageGuard> {
+        let (frame_format, _dma_guard, bo) =
+            self.capture_target_frame_dmabuf(target, cursor_overlay, capture_region)?;
+        crate::vulkan::import_dmabuf_to_vk_image(context, &bo, frame_format.size)
     }
 
     /// Obtain a screencapture in the form of a WlBuffer backed by a GBM Bufferobject on the GPU.
