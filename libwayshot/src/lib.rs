@@ -20,12 +20,7 @@ mod vulkan;
 mod tests;
 
 use std::{
-    collections::HashSet,
-    fs::File,
-    os::fd::AsFd,
-    path::Path,
-    sync::atomic::Ordering,
-    thread,
+    collections::HashSet, fs::File, os::fd::AsFd, path::Path, sync::atomic::Ordering, thread,
 };
 
 use dispatch::{DMABUFState, LayerShellState};

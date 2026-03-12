@@ -190,10 +190,8 @@ impl Png {
             .unwrap_or(&PngCompression::Named("default".to_string()))
         {
             PngCompression::Level(level) => {
-                if *level <= 3 {
-                    image::codecs::png::CompressionType::Fast
-                } else if *level >= 8 {
-                    image::codecs::png::CompressionType::Best
+                if *level <= 9 {
+                    image::codecs::png::CompressionType::Level(*level)
                 } else {
                     image::codecs::png::CompressionType::Default
                 }
@@ -201,7 +199,8 @@ impl Png {
             PngCompression::Named(name) => match name.as_str() {
                 "default" => image::codecs::png::CompressionType::Default,
                 "best" => image::codecs::png::CompressionType::Best,
-                "fast" | "none" | "uncompressed" => image::codecs::png::CompressionType::Fast,
+                "fast" => image::codecs::png::CompressionType::Fast,
+                "none" | "uncompressed" => image::codecs::png::CompressionType::Uncompressed,
                 _ => image::codecs::png::CompressionType::Default,
             },
         }
