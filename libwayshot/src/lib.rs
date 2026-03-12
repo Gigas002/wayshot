@@ -16,6 +16,9 @@ mod egl;
 #[cfg(feature = "vulkan")]
 mod vulkan;
 
+#[cfg(test)]
+mod tests;
+
 use std::{
     collections::HashSet,
     fs::File,
