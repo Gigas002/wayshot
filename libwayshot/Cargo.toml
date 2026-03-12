@@ -9,12 +9,13 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-default = ["png"]
+default = ["png", "egl"]
 png = ["image/png"]
 jpeg = ["image/jpeg"]
 qoi = ["image/qoi"]
 webp = ["image/webp"]
 avif = ["image/avif"]
+egl = ["dep:gl", "dep:r-egl-wayland"]
 vulkan = ["dep:ash"]
 
 [dependencies]
@@ -36,6 +37,6 @@ wayland-backend = { version = "0.3.10", features = ["client_system"] }
 gbm = "0.18.0"
 drm = "0.14.1"
 
-gl.workspace = true
-r-egl-wayland.workspace = true
+gl = { workspace = true, optional = true }
+r-egl-wayland = { workspace = true, optional = true }
 ash = { workspace = true, optional = true }

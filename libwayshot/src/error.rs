@@ -2,6 +2,7 @@ use std::{io, result};
 
 use drm::buffer::UnrecognizedFourcc;
 use gbm::InvalidFdError;
+#[cfg(feature = "egl")]
 use r_egl_wayland::r_egl as egl;
 use thiserror::Error;
 use wayland_client::{
@@ -46,8 +47,10 @@ pub enum Error {
     NoDMAStateError,
     #[error("dmabuf color format provided by compositor is invalid")]
     UnrecognizedColorCode(#[from] UnrecognizedFourcc),
+    #[cfg(feature = "egl")]
     #[error("dmabuf device has been destroyed")]
     EGLError(#[from] egl::Error),
+    #[cfg(feature = "egl")]
     #[error("No EGLImageTargetTexture2DOES function located, this extension may not be supported")]
     EGLImageToTexProcNotFoundError,
     #[cfg(feature = "vulkan")]
@@ -266,6 +269,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "egl")]
     #[test]
     fn test_from_egl_error() {
         let egl_error = egl::Error::ContextLost;

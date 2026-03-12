@@ -1,7 +1,7 @@
 //! Vulkan-based capture path: DMA-BUF → VkImage.
 //!
 //! This module provides Vulkan analogues of the EGL capture API when the `vulkan` feature is enabled:
-//! - [`VulkanImageGuard`] is the analogue of [`crate::screencopy::EGLImageGuard`]
+//! - [`VulkanImageGuard`] is the analogue of [`EGLImageGuard`](crate::egl::EGLImageGuard) (when the `egl` feature is enabled)
 //! - [`capture_target_frame_vk_image`][`crate::WayshotConnection::capture_target_frame_vk_image`] is the analogue of [`capture_target_frame_eglimage`][`crate::WayshotConnection::capture_target_frame_eglimage`]
 //! - [`create_screencast_with_vulkan`][`crate::WayshotConnection::create_screencast_with_vulkan`] is the analogue of [`create_screencast_with_egl`][`crate::WayshotConnection::create_screencast_with_egl`]
 
