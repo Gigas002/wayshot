@@ -96,6 +96,11 @@ pub use crate::vulkan::{VulkanCaptureContext, VulkanImageGuard};
 
 pub use crate::error::{Error, Result};
 
+#[cfg(feature = "bench")]
+pub use crate::convert::{create_converter, Convert};
+#[cfg(feature = "bench")]
+pub use crate::image_util::rotate_image_buffer;
+
 pub mod reexport {
     use wayland_client::protocol::wl_output;
     pub use wayland_client::WEnum;

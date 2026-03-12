@@ -88,6 +88,18 @@ cargo build --no-default-features --features clipboard,logger,notifications
 | `notifications`| Desktop notifications after each capture              | notify-rust           |
 | `selector`     | `--geometry` flag, interactive region selection       | libwaysip             |
 
+# Benchmarking
+
+To compare **EGL** vs **Vulkan** capture performance (and run image-operation benchmarks), see **[docs/benchmarking.md](docs/benchmarking.md)**.
+
+Quick version: run under a Wayland session, then:
+
+```bash
+cargo bench -p libwayshot --features "egl,vulkan" -- capture
+```
+
+Open the generated Criterion HTML report to see timings for `capture_egl` and `capture_vulkan`.
+
 ## Clipboard without the built-in feature
 
 If you build without the `clipboard` feature, you can still pipe stdout to `wl-copy`:
