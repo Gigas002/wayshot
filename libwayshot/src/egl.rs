@@ -111,7 +111,7 @@ pub fn bind_egl_image_to_gl_texture(guard: &EGLImageGuard) -> Result<()> {
             }
         };
         std::mem::transmute::<
-            _,
+            extern "system" fn(),
             unsafe extern "system" fn(gl::types::GLenum, gl::types::GLeglImageOES) -> (),
         >(f)
     };
