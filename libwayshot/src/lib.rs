@@ -5,14 +5,14 @@
 
 mod convert;
 mod dispatch;
+#[cfg(feature = "egl")]
+mod egl;
 mod error;
 mod image_util;
 pub mod output;
 pub mod region;
 pub mod screencast;
 mod screencopy;
-#[cfg(feature = "egl")]
-mod egl;
 #[cfg(feature = "vulkan")]
 mod vulkan;
 
@@ -33,8 +33,7 @@ use image::DynamicImage;
 use image::imageops::replace;
 use memmap2::MmapMut;
 use screencopy::{
-    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard,
-    create_shm_fd,
+    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
 };
 use tracing::debug;
 use wayland_client::{
@@ -97,7 +96,7 @@ pub use crate::vulkan::{VulkanCaptureContext, VulkanImageGuard};
 pub use crate::error::{Error, Result};
 
 #[cfg(feature = "bench")]
-pub use crate::convert::{create_converter, Convert};
+pub use crate::convert::{Convert, create_converter};
 #[cfg(feature = "bench")]
 pub use crate::image_util::rotate_image_buffer;
 
@@ -485,8 +484,7 @@ impl WayshotConnection {
         cursor_overlay: bool,
         capture_region: Option<EmbeddedRegion>,
     ) -> Result<()> {
-        let guard =
-            self.capture_target_frame_eglimage(target, cursor_overlay, capture_region)?;
+        let guard = self.capture_target_frame_eglimage(target, cursor_overlay, capture_region)?;
         crate::egl::bind_egl_image_to_gl_texture(&guard)
     }
 

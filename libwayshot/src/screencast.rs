@@ -361,8 +361,7 @@ impl WayshotConnection {
                 return Err(Error::NoDMAStateError);
             }
             let frame_format = state.dmabuf_formats[0];
-            let guard =
-                crate::vulkan::import_dmabuf_to_vk_image(context, bo, frame_format.size)?;
+            let guard = crate::vulkan::import_dmabuf_to_vk_image(context, bo, frame_format.size)?;
             cast.vulkan_image = Some(guard);
         }
 

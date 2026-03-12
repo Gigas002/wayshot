@@ -237,7 +237,7 @@ mod error_tests {
 
 #[cfg(test)]
 mod convert_tests {
-    use crate::convert::{create_converter, Convert};
+    use crate::convert::{Convert, create_converter};
     use image::ColorType;
     use wayland_client::protocol::wl_shm;
 
@@ -295,10 +295,7 @@ mod convert_tests {
     #[test]
     fn convert_rgb8_multiple_pixels() {
         let converter = create_converter(wl_shm::Format::Argb8888).unwrap();
-        let mut data = vec![
-            0x11, 0x22, 0x33, 0x44,
-            0xaa, 0xbb, 0xcc, 0xdd,
-        ];
+        let mut data = vec![0x11, 0x22, 0x33, 0x44, 0xaa, 0xbb, 0xcc, 0xdd];
         converter.convert_inplace(&mut data);
         assert_eq!(data[0], 0x33);
         assert_eq!(data[2], 0x11);
@@ -334,7 +331,10 @@ mod screencopy_tests {
     fn frame_format_byte_size() {
         let format = FrameFormat {
             format: wl_shm::Format::Argb8888,
-            size: Size { width: 100, height: 200 },
+            size: Size {
+                width: 100,
+                height: 200,
+            },
             stride: 400,
         };
         assert_eq!(format.byte_size(), 400 * 200);
@@ -344,7 +344,10 @@ mod screencopy_tests {
     fn frame_format_byte_size_small() {
         let format = FrameFormat {
             format: wl_shm::Format::Xrgb8888,
-            size: Size { width: 2, height: 2 },
+            size: Size {
+                width: 2,
+                height: 2,
+            },
             stride: 8,
         };
         assert_eq!(format.byte_size(), 16);
@@ -359,14 +362,18 @@ mod image_util_tests {
     use wayland_client::protocol::wl_output::Transform;
 
     fn make_image(w: u32, h: u32) -> DynamicImage {
-        let buf: RgbaImage = ImageBuffer::from_raw(w, h, (0..w * h * 4).map(|i| i as u8).collect()).unwrap();
+        let buf: RgbaImage =
+            ImageBuffer::from_raw(w, h, (0..w * h * 4).map(|i| i as u8).collect()).unwrap();
         DynamicImage::ImageRgba8(buf)
     }
 
     #[test]
     fn rotate_image_buffer_normal_unchanged() {
         let image = make_image(10, 20);
-        let logical_size = Size { width: 10, height: 20 };
+        let logical_size = Size {
+            width: 10,
+            height: 20,
+        };
         let out = rotate_image_buffer(image, Transform::Normal, logical_size, 2.0);
         assert_eq!(out.width(), 10);
         assert_eq!(out.height(), 20);
@@ -375,7 +382,10 @@ mod image_util_tests {
     #[test]
     fn rotate_image_buffer_90_swaps_dimensions() {
         let image = make_image(10, 20);
-        let logical_size = Size { width: 10, height: 20 };
+        let logical_size = Size {
+            width: 10,
+            height: 20,
+        };
         let out = rotate_image_buffer(image, Transform::_90, logical_size, 2.0);
         assert_eq!(out.width(), 20);
         assert_eq!(out.height(), 10);
@@ -384,7 +394,10 @@ mod image_util_tests {
     #[test]
     fn rotate_image_buffer_180_same_dimensions() {
         let image = make_image(8, 6);
-        let logical_size = Size { width: 8, height: 6 };
+        let logical_size = Size {
+            width: 8,
+            height: 6,
+        };
         let out = rotate_image_buffer(image, Transform::_180, logical_size, 1.0);
         assert_eq!(out.width(), 8);
         assert_eq!(out.height(), 6);
@@ -393,7 +406,10 @@ mod image_util_tests {
     #[test]
     fn rotate_image_buffer_270_swaps_dimensions() {
         let image = make_image(12, 14);
-        let logical_size = Size { width: 12, height: 14 };
+        let logical_size = Size {
+            width: 12,
+            height: 14,
+        };
         let out = rotate_image_buffer(image, Transform::_270, logical_size, 1.0);
         assert_eq!(out.width(), 14);
         assert_eq!(out.height(), 12);
@@ -402,7 +418,10 @@ mod image_util_tests {
     #[test]
     fn rotate_image_buffer_flipped_same_dimensions() {
         let image = make_image(5, 5);
-        let logical_size = Size { width: 5, height: 5 };
+        let logical_size = Size {
+            width: 5,
+            height: 5,
+        };
         let out = rotate_image_buffer(image, Transform::Flipped, logical_size, 1.0);
         assert_eq!(out.width(), 5);
         assert_eq!(out.height(), 5);
@@ -459,8 +478,8 @@ mod output_tests {
     use std::mem;
     use std::os::unix::net::UnixStream;
     use wayland_backend::client::Backend;
-    use wayland_client::protocol::wl_output::WlOutput;
     use wayland_client::Proxy;
+    use wayland_client::protocol::wl_output::WlOutput;
 
     fn make_output_info(
         name: &str,
@@ -492,11 +511,17 @@ mod output_tests {
         let output_info = make_output_info(
             "HDMI-A-1",
             "Main Display",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -509,11 +534,17 @@ mod output_tests {
         let output_info = make_output_info(
             "",
             "",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -526,11 +557,17 @@ mod output_tests {
         let output_info = make_output_info(
             "DP-1",
             "Secondary Display",
-            Size { width: 3840, height: 2160 },
+            Size {
+                width: 3840,
+                height: 2160,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -543,11 +580,17 @@ mod output_tests {
         let o1 = make_output_info(
             "eDP-1",
             "Laptop Screen",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -557,11 +600,17 @@ mod output_tests {
         let o15 = make_output_info(
             "DP-2",
             "HiDPI Display",
-            Size { width: 3840, height: 2160 },
+            Size {
+                width: 3840,
+                height: 2160,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 2560, height: 1440 },
+                    size: Size {
+                        width: 2560,
+                        height: 1440,
+                    },
                 },
             },
         );
@@ -574,11 +623,17 @@ mod output_tests {
         let output_info = make_output_info(
             "HDMI-1",
             "Debug Display",
-            Size { width: 800, height: 600 },
+            Size {
+                width: 800,
+                height: 600,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 800, height: 600 },
+                    size: Size {
+                        width: 800,
+                        height: 600,
+                    },
                 },
             },
         );
@@ -596,11 +651,17 @@ mod output_tests {
         let o1 = make_output_info(
             "HDMI-1",
             "Clone Display",
-            Size { width: 1024, height: 768 },
+            Size {
+                width: 1024,
+                height: 768,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1024, height: 768 },
+                    size: Size {
+                        width: 1024,
+                        height: 768,
+                    },
                 },
             },
         );
@@ -619,11 +680,17 @@ mod output_tests {
         let output_info = make_output_info(
             "DP-1",
             "Display",
-            Size { width: 3840, height: 2160 },
+            Size {
+                width: 3840,
+                height: 2160,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 100, y: 50 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -638,11 +705,17 @@ mod output_tests {
         let output_info = make_output_info(
             "eDP-1",
             "Display",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 960, height: 540 },
+                    size: Size {
+                        width: 960,
+                        height: 540,
+                    },
                 },
             },
         );
@@ -657,11 +730,17 @@ mod output_tests {
         let output_info = make_output_info(
             "HDMI-1",
             "Display",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: -100, y: 200 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -677,11 +756,17 @@ mod output_tests {
         let output_info = make_output_info(
             "HDMI-1",
             "Display",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -700,11 +785,17 @@ mod output_tests {
         let output_info = make_output_info(
             "HDMI-1",
             "Display",
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 0, y: 0 },
-                    size: Size { width: 1920, height: 1080 },
+                    size: Size {
+                        width: 1920,
+                        height: 1080,
+                    },
                 },
             },
         );
@@ -722,8 +813,8 @@ mod region_tests {
     use std::mem;
     use std::os::unix::net::UnixStream;
     use wayland_backend::client::Backend;
-    use wayland_client::protocol::wl_output::WlOutput;
     use wayland_client::Proxy;
+    use wayland_client::protocol::wl_output::WlOutput;
 
     fn make_output(name: &str, position: Position, size: Size) -> OutputInfo {
         OutputInfo {
@@ -752,13 +843,19 @@ mod region_tests {
         let viewport = LogicalRegion {
             inner: Region {
                 position: Position { x: 5, y: -5 },
-                size: Size { width: 20, height: 20 },
+                size: Size {
+                    width: 20,
+                    height: 20,
+                },
             },
         };
         let relative_to = LogicalRegion {
             inner: Region {
                 position: Position { x: 0, y: 0 },
-                size: Size { width: 15, height: 10 },
+                size: Size {
+                    width: 15,
+                    height: 10,
+                },
             },
         };
         let embedded = EmbeddedRegion::new(viewport, relative_to).expect("should be clamped");
@@ -766,7 +863,10 @@ mod region_tests {
             embedded.inner,
             Region {
                 position: Position { x: 5, y: 0 },
-                size: Size { width: 10, height: 10 }
+                size: Size {
+                    width: 10,
+                    height: 10
+                }
             }
         );
     }
@@ -776,13 +876,19 @@ mod region_tests {
         let viewport = LogicalRegion {
             inner: Region {
                 position: Position { x: 20, y: 20 },
-                size: Size { width: 5, height: 5 },
+                size: Size {
+                    width: 5,
+                    height: 5,
+                },
             },
         };
         let relative_to = LogicalRegion {
             inner: Region {
                 position: Position { x: 0, y: 0 },
-                size: Size { width: 10, height: 10 },
+                size: Size {
+                    width: 10,
+                    height: 10,
+                },
             },
         };
         assert!(EmbeddedRegion::new(viewport, relative_to).is_none());
@@ -793,14 +899,20 @@ mod region_tests {
         let relative_to = LogicalRegion {
             inner: Region {
                 position: Position { x: 10, y: 15 },
-                size: Size { width: 100, height: 100 },
+                size: Size {
+                    width: 100,
+                    height: 100,
+                },
             },
         };
         let embedded = EmbeddedRegion {
             relative_to,
             inner: Region {
                 position: Position { x: 5, y: 5 },
-                size: Size { width: 20, height: 30 },
+                size: Size {
+                    width: 20,
+                    height: 30,
+                },
             },
         };
         let logical = embedded.logical();
@@ -809,7 +921,10 @@ mod region_tests {
             LogicalRegion {
                 inner: Region {
                     position: Position { x: 15, y: 20 },
-                    size: Size { width: 20, height: 30 }
+                    size: Size {
+                        width: 20,
+                        height: 30
+                    }
                 }
             }
         );
@@ -818,7 +933,10 @@ mod region_tests {
     #[test]
     fn display_formatters_match_expected_layout() {
         let position = Position { x: -5, y: 10 };
-        let size = Size { width: 42, height: 24 };
+        let size = Size {
+            width: 42,
+            height: 24,
+        };
         let region = Region { position, size };
         let logical = LogicalRegion { inner: region };
         let embedded = EmbeddedRegion {
@@ -840,7 +958,10 @@ mod region_tests {
         let output = make_output(
             "primary",
             Position { x: 100, y: 50 },
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
         );
         let logical = LogicalRegion::from(&output);
         assert_eq!(logical.inner.position.x, 100);
@@ -856,12 +977,18 @@ mod region_tests {
             make_output(
                 "A",
                 Position { x: 0, y: 0 },
-                Size { width: 1920, height: 1080 },
+                Size {
+                    width: 1920,
+                    height: 1080,
+                },
             ),
             make_output(
                 "B",
                 Position { x: 1920, y: -100 },
-                Size { width: 1280, height: 1024 },
+                Size {
+                    width: 1280,
+                    height: 1024,
+                },
             ),
         ];
         let logical = LogicalRegion::try_from(outputs.as_slice()).expect("valid slice");
@@ -907,13 +1034,19 @@ mod region_tests {
         let viewport = LogicalRegion {
             inner: Region {
                 position: Position { x: 10, y: 20 },
-                size: Size { width: 100, height: 50 },
+                size: Size {
+                    width: 100,
+                    height: 50,
+                },
             },
         };
         let relative_to = LogicalRegion {
             inner: Region {
                 position: Position { x: 10, y: 20 },
-                size: Size { width: 100, height: 50 },
+                size: Size {
+                    width: 100,
+                    height: 50,
+                },
             },
         };
         let embedded = EmbeddedRegion::new(viewport, relative_to).expect("exact fit");
@@ -928,13 +1061,19 @@ mod region_tests {
         let viewport = LogicalRegion {
             inner: Region {
                 position: Position { x: 5, y: 5 },
-                size: Size { width: 10, height: 10 },
+                size: Size {
+                    width: 10,
+                    height: 10,
+                },
             },
         };
         let relative_to = LogicalRegion {
             inner: Region {
                 position: Position { x: 0, y: 0 },
-                size: Size { width: 100, height: 100 },
+                size: Size {
+                    width: 100,
+                    height: 100,
+                },
             },
         };
         let embedded = EmbeddedRegion::new(viewport, relative_to).expect("fully inside");
@@ -949,7 +1088,10 @@ mod region_tests {
         let output = make_output(
             "primary",
             Position { x: 42, y: 43 },
-            Size { width: 1920, height: 1080 },
+            Size {
+                width: 1920,
+                height: 1080,
+            },
         );
         let logical = LogicalRegion::from(&output);
         assert_eq!(logical.inner.position.x, 42);

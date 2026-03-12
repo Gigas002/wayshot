@@ -10,7 +10,7 @@
 use std::os::fd::IntoRawFd;
 
 use gbm::BufferObject;
-use r_egl_wayland::{r_egl as egl, EGL_INSTALCE, WayEglTrait};
+use r_egl_wayland::{EGL_INSTALCE, WayEglTrait, r_egl as egl};
 use wayland_client::protocol::wl_display::WlDisplay;
 
 use crate::error::{Error, Result};
@@ -42,7 +42,10 @@ pub fn get_egl_display_wl(display: &WlDisplay) -> Result<egl::Display> {
 
 /// Initialize EGL for the given display.
 pub fn initialize_egl(display: egl::Display) -> Result<()> {
-    EGL_INSTALCE.initialize(display).map(|_| ()).map_err(Error::from)
+    EGL_INSTALCE
+        .initialize(display)
+        .map(|_| ())
+        .map_err(Error::from)
 }
 
 /// Create an EGLImage from a DMA-BUF (GBM buffer object). Returns a guard that destroys the image on drop.
@@ -77,21 +80,19 @@ pub fn create_egl_image_from_dmabuf(
         image_attribs
     );
     unsafe {
-        let image = EGL_INSTALCE.create_image(
-            egl_display,
-            egl::Context::from_ptr(egl::NO_CONTEXT),
-            egl::LINUX_DMA_BUF_EXT as u32,
-            egl::ClientBuffer::from_ptr(std::ptr::null_mut()),
-            &image_attribs,
-        )
-        .map_err(|e| {
-            tracing::error!("eglCreateImage call failed with error {e}");
-            Error::from(e)
-        })?;
-        Ok(EGLImageGuard {
-            image,
-            egl_display,
-        })
+        let image = EGL_INSTALCE
+            .create_image(
+                egl_display,
+                egl::Context::from_ptr(egl::NO_CONTEXT),
+                egl::LINUX_DMA_BUF_EXT as u32,
+                egl::ClientBuffer::from_ptr(std::ptr::null_mut()),
+                &image_attribs,
+            )
+            .map_err(|e| {
+                tracing::error!("eglCreateImage call failed with error {e}");
+                Error::from(e)
+            })?;
+        Ok(EGLImageGuard { image, egl_display })
     }
 }
 
@@ -109,10 +110,10 @@ pub fn bind_egl_image_to_gl_texture(guard: &EGLImageGuard) -> Result<()> {
                 return Err(Error::EGLImageToTexProcNotFoundError);
             }
         };
-        std::mem::transmute::<_, unsafe extern "system" fn(
-            gl::types::GLenum,
-            gl::types::GLeglImageOES,
-        ) -> ()>(f)
+        std::mem::transmute::<
+            _,
+            unsafe extern "system" fn(gl::types::GLenum, gl::types::GLeglImageOES) -> (),
+        >(f)
     };
     unsafe {
         gl_egl_image_texture_target_2d_oes(gl::TEXTURE_2D, guard.image.as_ptr());

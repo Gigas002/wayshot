@@ -6,7 +6,7 @@
 //! - EGL: build with `--features egl` (default).
 //! - Vulkan: build with `--features vulkan`. Needs a Vulkan driver and the same Wayland/DRI setup.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use libwayshot::{WayshotConnection, WayshotTarget};
 use std::time::Duration;
 use wayland_client::Connection;
@@ -39,10 +39,7 @@ fn bench_egl_capture(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
     group.bench_function("capture_target_frame_eglimage", |b| {
         b.iter(|| {
-            black_box(
-                wayshot
-                    .capture_target_frame_eglimage(black_box(&target), false, None),
-            )
+            black_box(wayshot.capture_target_frame_eglimage(black_box(&target), false, None))
         });
     });
     group.finish();
@@ -53,10 +50,10 @@ fn bench_egl_capture(_c: &mut Criterion) {}
 
 #[cfg(feature = "vulkan")]
 fn bench_vulkan_capture(c: &mut Criterion) {
-    use std::os::fd::AsRawFd;
-    use std::sync::Arc;
     use ash::vk;
     use ash::{Device, Instance};
+    use std::os::fd::AsRawFd;
+    use std::sync::Arc;
 
     let (wayshot, target) = match connect_with_dmabuf() {
         Ok(x) => x,
@@ -83,9 +80,8 @@ fn bench_vulkan_capture(c: &mut Criterion) {
         }
     };
 
-    let instance = match unsafe {
-        Instance::new(&entry, &vk::InstanceCreateInfo::default(), None)
-    } {
+    let instance = match unsafe { Instance::new(&entry, &vk::InstanceCreateInfo::default(), None) }
+    {
         Ok(i) => i,
         Err(e) => {
             eprintln!("Vulkan bench skipped (instance creation failed): {}", e);
@@ -138,10 +134,7 @@ fn bench_vulkan_capture(c: &mut Criterion) {
 
     let khr_fd = ash::khr::external_memory_fd::Device::new(&instance, &device);
     let memory_type_index = match unsafe {
-        khr_fd.get_memory_fd_properties_khr(
-            vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
-            fd_raw,
-        )
+        khr_fd.get_memory_fd_properties_khr(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT, fd_raw)
     } {
         Ok(props) => {
             let mask = props.memory_type_bits;

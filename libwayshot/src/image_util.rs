@@ -1,7 +1,4 @@
-use image::{
-    DynamicImage,
-    imageops::FilterType,
-};
+use image::{DynamicImage, imageops::FilterType};
 use wayland_client::protocol::wl_output::Transform;
 
 use crate::region::Size;
@@ -63,4 +60,3 @@ pub(crate) fn rotate_image_buffer(
     tracing::debug!("Resizing image to {new_width}x{new_height}");
     image::imageops::resize(&rotated_image, new_width, new_height, FilterType::Gaussian).into()
 }
-

@@ -8,8 +8,8 @@
 use std::os::fd::IntoRawFd;
 use std::sync::Arc;
 
-use ash::vk;
 use ash::Device;
+use ash::vk;
 use gbm::BufferObject;
 
 use crate::error::{Error, Result};
@@ -91,7 +91,7 @@ pub(crate) fn drm_fourcc_to_vk_format(fourcc: u32) -> Result<vk::Format> {
             return Err(Error::VulkanError(format!(
                 "unsupported DRM fourcc for Vulkan: 0x{:08x}",
                 fourcc
-            )))
+            )));
         }
     };
     Ok(vk_format)

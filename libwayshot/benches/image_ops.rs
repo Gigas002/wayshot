@@ -1,27 +1,26 @@
 //! Benchmarks for image operations (rotation, color conversion).
 //! These run without a Wayland compositor.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use image::{DynamicImage, ImageBuffer, RgbaImage};
 use wayland_client::protocol::wl_output::Transform;
 
-use libwayshot::rotate_image_buffer;
 use libwayshot::region::Size;
-use libwayshot::{create_converter, Convert};
+use libwayshot::rotate_image_buffer;
+use libwayshot::{Convert, create_converter};
 
 fn make_image(w: u32, h: u32) -> DynamicImage {
-    let buf: RgbaImage = ImageBuffer::from_raw(
-        w,
-        h,
-        (0..w * h * 4).map(|i| i as u8).collect(),
-    )
-    .unwrap();
+    let buf: RgbaImage =
+        ImageBuffer::from_raw(w, h, (0..w * h * 4).map(|i| i as u8).collect()).unwrap();
     DynamicImage::ImageRgba8(buf)
 }
 
 fn bench_rotate(c: &mut Criterion) {
     let mut group = c.benchmark_group("rotate_image_buffer");
-    let logical = Size { width: 1920, height: 1080 };
+    let logical = Size {
+        width: 1920,
+        height: 1080,
+    };
 
     for (name, transform) in [
         ("normal", Transform::Normal),
@@ -34,12 +33,7 @@ fn bench_rotate(c: &mut Criterion) {
             let image = make_image(1920, 1080);
             b.iter(|| {
                 let img = image.clone();
-                black_box(rotate_image_buffer(
-                    img,
-                    transform,
-                    logical,
-                    1.0,
-                ))
+                black_box(rotate_image_buffer(img, transform, logical, 1.0))
             });
         });
     }
