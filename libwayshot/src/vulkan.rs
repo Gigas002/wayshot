@@ -5,6 +5,7 @@
 //! - [`capture_target_frame_vk_image`][`crate::WayshotConnection::capture_target_frame_vk_image`] is the analogue of [`capture_target_frame_eglimage`][`crate::WayshotConnection::capture_target_frame_eglimage`]
 //! - [`create_screencast_with_vulkan`][`crate::WayshotConnection::create_screencast_with_vulkan`] is the analogue of [`create_screencast_with_egl`][`crate::WayshotConnection::create_screencast_with_egl`]
 
+use std::fmt;
 use std::os::fd::IntoRawFd;
 use std::sync::Arc;
 
@@ -31,6 +32,15 @@ pub struct VulkanCaptureContext {
     pub memory_type_index: u32,
 }
 
+impl fmt::Debug for VulkanCaptureContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VulkanCaptureContext")
+            .field("queue_family_index", &self.queue_family_index)
+            .field("memory_type_index", &self.memory_type_index)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Guard that owns a VkImage (and its memory) created from a DMA-BUF capture.
 /// Destroyed on drop. Use [`image`](VulkanImageGuard::image) and [`image_view`](VulkanImageGuard::image_view) in your Vulkan pipeline.
 pub struct VulkanImageGuard {
@@ -40,6 +50,15 @@ pub struct VulkanImageGuard {
     memory: vk::DeviceMemory,
     pub format: vk::Format,
     pub size: Size<u32>,
+}
+
+impl fmt::Debug for VulkanImageGuard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VulkanImageGuard")
+            .field("format", &self.format)
+            .field("size", &self.size)
+            .finish_non_exhaustive()
+    }
 }
 
 impl VulkanImageGuard {
@@ -105,7 +124,7 @@ pub fn import_dmabuf_to_vk_image(
     size: Size<u32>,
 ) -> Result<VulkanImageGuard> {
     let device = &context.device;
-    let fourcc = bo.format();
+    let fourcc = bo.format() as u32;
     let vk_format = drm_fourcc_to_vk_format(fourcc)?;
     let fd = bo.fd_for_plane(0)?.into_raw_fd();
 
