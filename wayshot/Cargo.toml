@@ -100,7 +100,9 @@ toml = { version = "1.0", default-features = false, features = [
 ] }
 serde = { version = "1.0", features = ["derive"] }
 dirs = "6.0"
-libwaysip = { version = "0.6", optional = true }
+# DO NOT MERGE, TEMP
+# libwaysip = { version = "0.6", branch = "fix_panic_on_hyperland", optional = true }
+libwaysip = { git = "https://github.com/waycrate/waysip", branch = "fix_panic_on_hyperland", optional = true }
 notify-rust = { version = "4.12", optional = true }
 
 [[bin]]
