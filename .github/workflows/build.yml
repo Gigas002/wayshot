@@ -7,6 +7,18 @@ env:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: all-features
+            cargo_args: --workspace --release --all-features
+          - name: default
+            cargo_args: --workspace --release
+          - name: minimal
+            cargo_args: --workspace --release --no-default-features --features "egl,png"
+
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -24,5 +36,5 @@ jobs:
         run: |
           pacman -Syu --noconfirm egl-wayland egl-gbm wayland base-devel mesa pango cairo libjxl
 
-      - name: Build
-        run: cargo build --workspace --release --all-features
+      - name: Build (${{ matrix.name }})
+        run: cargo build ${{ matrix.cargo_args }}
