@@ -25,4 +25,4 @@ jobs:
           pacman -Syu --noconfirm egl-wayland egl-gbm wayland base-devel mesa pango cairo libjxl
 
       - name: Build
-        run: cargo build --workspace --release
+        run: cargo build --workspace --release --all-features
