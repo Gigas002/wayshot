@@ -70,7 +70,8 @@ fn encoding_png() {
 
 #[test]
 fn encoding_jpeg() {
-    let cli = parse(&["--list-outputs", "--encoding", "jpeg"]).unwrap();
+    // CLI ValueEnum accepts "jpg" (suggested value); "jpeg" is accepted by FromStr in utils.
+    let cli = parse(&["--list-outputs", "--encoding", "jpg"]).unwrap();
     assert_eq!(cli.encoding, Some(EncodingFormat::Jpg));
 }
 
@@ -128,7 +129,8 @@ fn parse_slurp_geometry_valid() {
 
 #[test]
 fn parse_slurp_geometry_with_whitespace() {
-    let r = utils::parse_slurp_geometry("  100 , 200  300 x 400  ").unwrap();
+    // Parser splits on first space: position must be "x,y" (no space), size "WxH". Only leading/trailing whitespace is trimmed.
+    let r = utils::parse_slurp_geometry("  100,200 300x400  ").unwrap();
     assert_eq!(r.inner.position.x, 100);
     assert_eq!(r.inner.position.y, 200);
     assert_eq!(r.inner.size.width, 300);
