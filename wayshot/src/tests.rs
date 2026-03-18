@@ -7,6 +7,7 @@ use crate::cli::Cli;
 use crate::config::Config;
 use crate::settings::{AppSettings, Command};
 use crate::utils::{self, EncodingFormat};
+use clap::Parser;
 
 fn parse(args: &[&str]) -> Result<Cli, clap::Error> {
     let args: Vec<OsString> = std::iter::once(OsString::from("wayshot"))
