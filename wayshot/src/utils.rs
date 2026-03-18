@@ -17,7 +17,7 @@ use std::{
 };
 
 use chrono::Local;
-#[cfg(feature = "selector")]
+#[cfg(any(feature = "selector", feature = "color_picker"))]
 use libwayshot::{
     Result as WayshotResult,
     region::{LogicalRegion, Position, Region, Size},
@@ -25,9 +25,55 @@ use libwayshot::{
 
 use crate::config::{Jxl, Png};
 
-// ─── Region helpers ───────────────────────────────────────────────────────────
+// ─── Slurp-style geometry parser ─────────────────────────────────────────────
+// Used for -g "$(slurp)" and compatible with grim. Format: "x,y widthxheight".
 
-#[cfg(feature = "selector")]
+/// Parse a geometry string in slurp/grim format: "x,y widthxheight" (e.g. "100,200 300x400").
+pub fn parse_slurp_geometry(s: &str) -> Result<libwayshot::LogicalRegion, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("geometry string is empty".to_string());
+    }
+    let (pos, size) = s
+        .split_once(|c: char| c.is_ascii_whitespace())
+        .ok_or_else(|| format!("invalid geometry: expected 'x,y widthxheight', got '{s}'"))?;
+    let (x, y) = pos
+        .split_once(',')
+        .ok_or_else(|| format!("invalid position: expected 'x,y', got '{pos}'"))?;
+    let (w, h) = size
+        .split_once('x')
+        .ok_or_else(|| format!("invalid size: expected 'widthxheight', got '{size}'"))?;
+    let x: i32 = x
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid x coordinate: {x}"))?;
+    let y: i32 = y
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid y coordinate: {y}"))?;
+    let w: u32 = w
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid width: {w}"))?;
+    let h: u32 = h
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid height: {h}"))?;
+    if w == 0 || h == 0 {
+        return Err("width and height must be positive".to_string());
+    }
+    Ok(libwayshot::LogicalRegion {
+        inner: libwayshot::region::Region {
+            position: libwayshot::region::Position { x, y },
+            size: libwayshot::region::Size {
+                width: w,
+                height: h,
+            },
+        },
+    })
+}
+
+#[cfg(any(feature = "selector", feature = "color_picker"))]
 pub fn waysip_to_region(
     size: libwaysip::Size,
     position: libwaysip::Position,
@@ -49,6 +95,37 @@ pub fn waysip_to_region(
             size,
         },
     })
+}
+
+/// Run WaySip area selection and return the chosen region. Used for both freeze and live paths.
+#[cfg(feature = "selector")]
+pub fn get_region_area(conn: &libwayshot::WayshotConnection) -> Result<LogicalRegion, String> {
+    let info = libwaysip::WaySip::new()
+        .with_connection(conn.conn.clone())
+        .with_selection_type(libwaysip::SelectionType::Area)
+        .get()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No area selected".to_string())?;
+    waysip_to_region(info.size(), info.left_top_point()).map_err(|e| e.to_string())
+}
+
+/// Run WaySip point selection and return a 1×1 region. Used for both freeze and live paths.
+#[cfg(feature = "color_picker")]
+pub fn get_region_point(conn: &libwayshot::WayshotConnection) -> Result<LogicalRegion, String> {
+    let info = libwaysip::WaySip::new()
+        .with_connection(conn.conn.clone())
+        .with_selection_type(libwaysip::SelectionType::Point)
+        .get()
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Failed to capture the point".to_string())?;
+    waysip_to_region(
+        libwaysip::Size {
+            width: 1,
+            height: 1,
+        },
+        info.left_top_point(),
+    )
+    .map_err(|e| e.to_string())
 }
 
 // ─── Encoding format ──────────────────────────────────────────────────────────

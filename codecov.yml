@@ -1,0 +1,7 @@
+# Exclude waymirror from coverage calculations.
+# CI already generates separate reports for libwayshot and wayshot and excludes
+# waymirror-egl via cargo llvm-cov --exclude; these ignores ensure any such
+# paths are never counted in coverage.
+ignore:
+  - "waymirror-egl/**"
+  - "**/examples/waymirror*"

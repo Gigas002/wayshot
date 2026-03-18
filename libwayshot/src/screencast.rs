@@ -1,4 +1,4 @@
-use std::os::fd::{AsFd, IntoRawFd};
+use std::os::fd::AsFd;
 
 use gbm::{BufferObject, BufferObjectFlags};
 use wayland_client::{
@@ -18,7 +18,6 @@ use crate::{
     EmbeddedRegion, Error, Result, Size, WayshotConnection, WayshotFrame, WayshotTarget,
     dispatch::{DMABUFState, FrameState, WayshotState},
 };
-use r_egl_wayland::{EGL_INSTALCE, r_egl as egl};
 
 /// It is a unit to do screencast. It storages used information for screencast
 /// You should use it and related api to do screencast
@@ -33,7 +32,12 @@ pub struct WayshotScreenCast {
     shm_pool: Option<WlShmPool>,
     shm_format: Option<wl_shm::Format>,
     bo: Option<BufferObject<()>>,
-    egl_display: Option<egl::Display>,
+    #[cfg(feature = "egl")]
+    egl_display: Option<crate::egl::EglDisplay>,
+    #[cfg(feature = "vulkan")]
+    pub(crate) vulkan_context: Option<crate::VulkanCaptureContext>,
+    #[cfg(feature = "vulkan")]
+    pub(crate) vulkan_image: Option<crate::VulkanImageGuard>,
 }
 
 impl Drop for WayshotScreenCast {
@@ -59,6 +63,13 @@ impl WayshotScreenCast {
     /// Get the buffer of the unit
     pub fn buffer(&self) -> &WlBuffer {
         &self.buffer
+    }
+
+    /// Get the current Vulkan image for this cast, if using [`create_screencast_with_vulkan`](WayshotConnection::create_screencast_with_vulkan).
+    /// Updated each time [`screencast`](WayshotConnection::screencast) is called successfully.
+    #[cfg(feature = "vulkan")]
+    pub fn vulkan_image(&self) -> Option<&crate::VulkanImageGuard> {
+        self.vulkan_image.as_ref()
     }
 }
 
@@ -87,16 +98,33 @@ impl WayshotConnection {
     /// We suggest you to use this api to do screencast
     /// Same with create_screencast_with_shm, but now it is with dmabuf
     /// And bind the a [egl::Display], to support the egl
+    #[cfg(feature = "egl")]
     pub fn create_screencast_with_egl(
         &self,
         target: WayshotTarget,
         cursor_overlay: bool,
         capture_region: Option<EmbeddedRegion>,
-        egl_display: egl::Display,
+        egl_display: crate::egl::EglDisplay,
     ) -> Result<WayshotScreenCast> {
         let mut cast =
             self.create_screencast_with_dmabuf(target, cursor_overlay, capture_region)?;
         cast.egl_display = Some(egl_display);
+        Ok(cast)
+    }
+
+    /// Vulkan analogue of [`create_screencast_with_egl`](Self::create_screencast_with_egl).
+    /// Each call to [`screencast`](Self::screencast) will update the Vulkan image; retrieve it via [`WayshotScreenCast::vulkan_image`].
+    #[cfg(feature = "vulkan")]
+    pub fn create_screencast_with_vulkan(
+        &self,
+        target: WayshotTarget,
+        cursor_overlay: bool,
+        capture_region: Option<EmbeddedRegion>,
+        vulkan_context: crate::VulkanCaptureContext,
+    ) -> Result<WayshotScreenCast> {
+        let mut cast =
+            self.create_screencast_with_dmabuf(target, cursor_overlay, capture_region)?;
+        cast.vulkan_context = Some(vulkan_context);
         Ok(cast)
     }
     /// This will save a screencast status for you
@@ -177,7 +205,12 @@ impl WayshotConnection {
             shm_pool: None,
             shm_format: None,
             bo: Some(bo),
+            #[cfg(feature = "egl")]
             egl_display: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_context: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_image: None,
         })
     }
     /// This will save a screencast status for you
@@ -237,7 +270,12 @@ impl WayshotConnection {
             shm_pool: Some(shm_pool),
             shm_format: Some(shm_format),
             bo: None,
+            #[cfg(feature = "egl")]
             egl_display: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_context: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_image: None,
         })
     }
 
@@ -308,62 +346,23 @@ impl WayshotConnection {
             event_queue.blocking_dispatch(&mut state)?;
         }
 
-        if let (Some(egl_display), Some(bo)) = (cast.egl_display, cast.dmabuf_bo()) {
-            type Attrib = egl::Attrib;
+        #[cfg(feature = "egl")]
+        if let (Some(egl_display), Some(bo)) = (cast.egl_display.as_ref(), cast.dmabuf_bo()) {
             if state.dmabuf_formats.is_empty() {
                 return Err(Error::NoDMAStateError);
             }
             let frame_format = state.dmabuf_formats[0];
-            let modifier: u64 = bo.modifier().into();
-            let image_attribs = [
-                egl::WIDTH as Attrib,
-                frame_format.size.width as Attrib,
-                egl::HEIGHT as Attrib,
-                frame_format.size.height as Attrib,
-                egl::LINUX_DRM_FOURCC_EXT as Attrib,
-                bo.format() as Attrib,
-                egl::DMA_BUF_PLANE0_FD_EXT as Attrib,
-                bo.fd_for_plane(0)?.into_raw_fd() as Attrib,
-                egl::DMA_BUF_PLANE0_OFFSET_EXT as Attrib,
-                bo.offset(0) as Attrib,
-                egl::DMA_BUF_PLANE0_PITCH_EXT as Attrib,
-                bo.stride_for_plane(0) as Attrib,
-                egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as Attrib,
-                (modifier as u32) as Attrib,
-                egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as Attrib,
-                (modifier >> 32) as Attrib,
-                egl::ATTRIB_NONE as Attrib,
-            ];
-            unsafe {
-                let image = EGL_INSTALCE.create_image(
-                    egl_display,
-                    egl::Context::from_ptr(egl::NO_CONTEXT),
-                    egl::LINUX_DMA_BUF_EXT as u32,
-                    egl::ClientBuffer::from_ptr(std::ptr::null_mut()), //NULL
-                    &image_attribs,
-                )?;
-                let gl_egl_image_texture_target_2d_oes: unsafe extern "system" fn(
-                    target: gl::types::GLenum,
-                    image: gl::types::GLeglImageOES,
-                )
-                    -> () = std::mem::transmute(
-                    match EGL_INSTALCE.get_proc_address("glEGLImageTargetTexture2DOES") {
-                        Some(f) => {
-                            tracing::debug!(
-                                "glEGLImageTargetTexture2DOES found at address {:#?}",
-                                f
-                            );
-                            f
-                        }
-                        None => {
-                            tracing::error!("glEGLImageTargetTexture2DOES not found");
-                            return Err(Error::EGLImageToTexProcNotFoundError);
-                        }
-                    },
-                );
+            crate::egl::create_egl_image_and_bind_to_gl_texture(*egl_display, bo, &frame_format)?;
+        }
 
-                gl_egl_image_texture_target_2d_oes(gl::TEXTURE_2D, image.as_ptr());
+        #[cfg(feature = "vulkan")]
+        if let (Some(context), Some(bo)) = (cast.vulkan_context.as_ref(), cast.dmabuf_bo()) {
+            if state.dmabuf_formats.is_empty() {
+                return Err(Error::NoDMAStateError);
             }
+            let frame_format = state.dmabuf_formats[0];
+            let guard = crate::vulkan::import_dmabuf_to_vk_image(context, bo, frame_format.size)?;
+            cast.vulkan_image = Some(guard);
         }
 
         Ok(())

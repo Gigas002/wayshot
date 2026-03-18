@@ -33,6 +33,10 @@ pub(crate) struct AppSettings {
     pub(crate) command: Command,
     /// Whether to render the cursor in the captured image.
     pub(crate) cursor: bool,
+    /// When true, freeze the screen before region/point selection; when false, select on live display.
+    pub(crate) freeze: bool,
+    /// Delay in milliseconds to wait before capture; None = no delay.
+    pub(crate) delay: Option<u32>,
     /// Final encoding format, after resolving extension / flag / config precedence.
     pub(crate) encoding: EncodingFormat,
     /// Destination file path, or `None` to skip file output.
@@ -58,6 +62,14 @@ impl AppSettings {
         // ── Cursor ────────────────────────────────────────────────────────────
         // Either the --cursor flag or config `cursor = true` enables cursor capture.
         let cursor = cli.cursor || base.cursor.unwrap_or_default();
+
+        // ── Freeze ─────────────────────────────────────────────────────────────
+        // Freeze screen before selection; false when CLI --no-freeze or config freeze = false.
+        let freeze = !cli.no_freeze && base.freeze.unwrap_or(true);
+
+        // ── Delay ─────────────────────────────────────────────────────────────
+        // Wait N ms before capture; CLI overrides config; None = no delay.
+        let delay = cli.delay.or(base.delay);
 
         // ── Encoding ──────────────────────────────────────────────────────────
         // Resolution order:
@@ -126,6 +138,8 @@ impl AppSettings {
         AppSettings {
             command,
             cursor,
+            freeze,
+            delay,
             encoding,
             file,
             stdout_print,
@@ -139,9 +153,29 @@ impl AppSettings {
     }
 
     fn resolve_capture_mode(cli: &Cli, output: Option<String>) -> CaptureMode {
-        #[cfg(feature = "selector")]
-        if cli.geometry {
-            return CaptureMode::Geometry;
+        if let Some(geom) = &cli.geometry {
+            match geom {
+                Some(s) if !s.trim().is_empty() => match utils::parse_slurp_geometry(s) {
+                    Ok(region) => return CaptureMode::GeometryRegion(region),
+                    Err(e) => {
+                        tracing::error!("invalid geometry: {e}");
+                        std::process::exit(1);
+                    }
+                },
+                Some(_) | None => {
+                    // -g with no value: interactive selection
+                    #[cfg(feature = "selector")]
+                    return CaptureMode::Geometry;
+                    #[cfg(not(feature = "selector"))]
+                    {
+                        tracing::error!(
+                            "interactive geometry selection requires the selector feature; \
+                             provide a geometry string instead, e.g. wayshot -g \"$(slurp)\""
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
         if let Some(ref name) = cli.toplevel {
             CaptureMode::Toplevel(name.clone())

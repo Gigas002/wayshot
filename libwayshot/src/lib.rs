@@ -5,30 +5,30 @@
 
 mod convert;
 mod dispatch;
+#[cfg(feature = "egl")]
+mod egl;
 mod error;
 mod image_util;
 pub mod output;
 pub mod region;
 pub mod screencast;
 mod screencopy;
+#[cfg(feature = "vulkan")]
+mod vulkan;
+
+#[cfg(test)]
+mod tests;
 
 use std::{
-    collections::HashSet,
-    fs::File,
-    os::fd::{AsFd, IntoRawFd},
-    path::Path,
-    sync::atomic::Ordering,
-    thread,
+    collections::HashSet, fs::File, os::fd::AsFd, path::Path, sync::atomic::Ordering, thread,
 };
 
 use dispatch::{DMABUFState, LayerShellState};
 use image::DynamicImage;
+use image::imageops::replace;
 use memmap2::MmapMut;
-use r_egl_wayland::WayEglTrait;
-use r_egl_wayland::{EGL_INSTALCE, r_egl as egl};
 use screencopy::{
-    DMAFrameFormat, DMAFrameGuard, EGLImageGuard, FrameCopy, FrameData, FrameFormat, FrameGuard,
-    create_shm_fd,
+    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
 };
 use tracing::debug;
 use wayland_client::{
@@ -83,7 +83,17 @@ pub use crate::{
     region::{EmbeddedRegion, LogicalRegion, RegionCapturer, Size, TopLevel},
 };
 
+#[cfg(feature = "egl")]
+pub use crate::egl::EGLImageGuard;
+#[cfg(feature = "vulkan")]
+pub use crate::vulkan::{VulkanCaptureContext, VulkanImageGuard};
+
 pub use crate::error::{Error, Result};
+
+#[cfg(feature = "bench")]
+pub use crate::convert::{Convert, create_converter};
+#[cfg(feature = "bench")]
+pub use crate::image_util::rotate_image_buffer;
 
 pub mod reexport {
     use wayland_client::protocol::wl_output;
@@ -462,35 +472,15 @@ impl WayshotConnection {
     /// - If the function was found and called, an OK(()), note that this does not necessarily mean that binding was successful, only that the function was called.
     ///   The caller may check for any OpenGL errors using the standard routes.
     /// - If the function was not found, [`Error::EGLImageToTexProcNotFoundError`] is returned
+    #[cfg(feature = "egl")]
     pub fn bind_target_frame_to_gl_texture(
         &self,
         target: &WayshotTarget,
         cursor_overlay: bool,
         capture_region: Option<EmbeddedRegion>,
     ) -> Result<()> {
-        let eglimage_guard =
-            self.capture_target_frame_eglimage(target, cursor_overlay, capture_region)?;
-        unsafe {
-            let gl_egl_image_texture_target_2d_oes: unsafe extern "system" fn(
-                target: gl::types::GLenum,
-                image: gl::types::GLeglImageOES,
-            ) -> () = std::mem::transmute(
-                match EGL_INSTALCE.get_proc_address("glEGLImageTargetTexture2DOES") {
-                    Some(f) => {
-                        tracing::debug!("glEGLImageTargetTexture2DOES found at address {:#?}", f);
-                        f
-                    }
-                    None => {
-                        tracing::error!("glEGLImageTargetTexture2DOES not found");
-                        return Err(Error::EGLImageToTexProcNotFoundError);
-                    }
-                },
-            );
-
-            gl_egl_image_texture_target_2d_oes(gl::TEXTURE_2D, eglimage_guard.image.as_ptr());
-            tracing::trace!("glEGLImageTargetTexture2DOES called");
-            Ok(())
-        }
+        let guard = self.capture_target_frame_eglimage(target, cursor_overlay, capture_region)?;
+        crate::egl::bind_egl_image_to_gl_texture(&guard)
     }
 
     /// Obtain a screencapture in the form of a EGLImage.
@@ -506,16 +496,16 @@ impl WayshotConnection {
     /// # Returns
     /// If successful, an EGLImageGuard which contains a pointer 'image' to the created EGLImage
     /// On error, the EGL [error code](https://registry.khronos.org/EGL/sdk/docs/man/html/eglGetError.xhtml) is returned via this crates Error type
+    #[cfg(feature = "egl")]
     pub fn capture_target_frame_eglimage(
         &self,
         target: &WayshotTarget,
         cursor_overlay: bool,
         capture_region: Option<EmbeddedRegion>,
     ) -> Result<EGLImageGuard> {
-        let egl_display = EGL_INSTALCE.get_display_wl(&self.conn.display())?;
+        let egl_display = crate::egl::get_egl_display_wl(&self.conn.display())?;
         tracing::trace!("eglDisplay obtained from Wayland connection's display");
-
-        EGL_INSTALCE.initialize(egl_display)?;
+        crate::egl::initialize_egl(egl_display)?;
         self.capture_target_frame_eglimage_on_display(
             egl_display,
             target,
@@ -539,56 +529,45 @@ impl WayshotConnection {
     /// # Returns
     /// If successful, an EGLImageGuard which contains a pointer 'image' to the created EGLImage
     /// On error, the EGL [error code](https://registry.khronos.org/EGL/sdk/docs/man/html/eglGetError.xhtml) is returned via this crates Error type
+    #[cfg(feature = "egl")]
     pub fn capture_target_frame_eglimage_on_display(
         &self,
-        egl_display: egl::Display,
+        egl_display: crate::egl::EglDisplay,
         target: &WayshotTarget,
         cursor_overlay: bool,
         capture_region: Option<EmbeddedRegion>,
     ) -> Result<EGLImageGuard> {
-        type Attrib = egl::Attrib;
         let (frame_format, _guard, bo) =
             self.capture_target_frame_dmabuf(target, cursor_overlay, capture_region)?;
-        let modifier: u64 = bo.modifier().into();
+        crate::egl::create_egl_image_from_dmabuf(egl_display, &bo, &frame_format)
+    }
 
-        let image_attribs = [
-            egl::WIDTH as Attrib,
-            frame_format.size.width as Attrib,
-            egl::HEIGHT as Attrib,
-            frame_format.size.height as Attrib,
-            egl::LINUX_DRM_FOURCC_EXT as Attrib,
-            bo.format() as Attrib,
-            egl::DMA_BUF_PLANE0_FD_EXT as Attrib,
-            bo.fd_for_plane(0)?.into_raw_fd() as Attrib,
-            egl::DMA_BUF_PLANE0_OFFSET_EXT as Attrib,
-            bo.offset(0) as Attrib,
-            egl::DMA_BUF_PLANE0_PITCH_EXT as Attrib,
-            bo.stride_for_plane(0) as Attrib,
-            egl::DMA_BUF_PLANE0_MODIFIER_LO_EXT as Attrib,
-            (modifier as u32) as Attrib,
-            egl::DMA_BUF_PLANE0_MODIFIER_HI_EXT as Attrib,
-            (modifier >> 32) as Attrib,
-            egl::ATTRIB_NONE as Attrib,
-        ];
-        tracing::debug!(
-            "Calling eglCreateImage with attributes: {:#?}",
-            image_attribs
-        );
-        unsafe {
-            match EGL_INSTALCE.create_image(
-                egl_display,
-                egl::Context::from_ptr(egl::NO_CONTEXT),
-                egl::LINUX_DMA_BUF_EXT as u32,
-                egl::ClientBuffer::from_ptr(std::ptr::null_mut()), //NULL
-                &image_attribs,
-            ) {
-                Ok(image) => Ok(EGLImageGuard { image, egl_display }),
-                Err(e) => {
-                    tracing::error!("eglCreateImage call failed with error {e}");
-                    Err(e.into())
-                }
-            }
-        }
+    /// Obtain a screencapture as a Vulkan image (VkImage) for use in Vulkan pipelines.
+    ///
+    /// This is the Vulkan analogue of [`capture_target_frame_eglimage`](Self::capture_target_frame_eglimage).
+    /// Uses the DMA-BUF path and imports the buffer into a VkImage via the given context.
+    /// The device in `context` must support `VK_EXT_external_memory_dma_buf` and `VK_KHR_external_memory_fd`.
+    ///
+    /// # Parameters
+    /// - `context`: Vulkan context (device, queue, memory type index for DMA-BUF import).
+    /// - `target`: Reference to the [WayshotTarget] from which the frame is to be captured.
+    /// - `cursor_overlay`: Whether to include the cursor in the capture.
+    /// - `capture_region`: Optional sub-area to capture; `None` for full target.
+    ///
+    /// # Returns
+    /// A [`VulkanImageGuard`] holding the VkImage and image view. Use [`VulkanImageGuard::image`]
+    /// and [`VulkanImageGuard::image_view`] in your Vulkan descriptor sets and pipelines.
+    #[cfg(feature = "vulkan")]
+    pub fn capture_target_frame_vk_image(
+        &self,
+        context: &crate::VulkanCaptureContext,
+        target: &WayshotTarget,
+        cursor_overlay: bool,
+        capture_region: Option<EmbeddedRegion>,
+    ) -> Result<crate::VulkanImageGuard> {
+        let (frame_format, _dma_guard, bo) =
+            self.capture_target_frame_dmabuf(target, cursor_overlay, capture_region)?;
+        crate::vulkan::import_dmabuf_to_vk_image(context, &bo, frame_format.size)
     }
 
     /// Obtain a screencapture in the form of a WlBuffer backed by a GBM Bufferobject on the GPU.
@@ -1425,33 +1404,13 @@ impl WayshotConnection {
                         let logical_region = frame_copy.logical_region;
                         let transform = frame_copy.transform;
                         let logical_size = logical_region.inner.size;
-                        // Perform in-place color conversion directly on the mmap buffer
-                        // to avoid cloning. Calling `get_image()` here would force an
-                        // immediate clone.
-                        let frame_color_type = frame_copy.convert_color_inplace()?;
-
-                        let image = match frame_color_type {
-                            image::ColorType::Rgba8 => {
-                                let image = frame_copy.into_mmap_rgba_image_buffer()?;
-                                image_util::prepare_mmap_rgba_image(
-                                    image,
-                                    transform,
-                                    logical_size,
-                                    max_scale,
-                                )
-                            }
-                            image::ColorType::Rgb8 => {
-                                let image: DynamicImage = (&frame_copy).try_into()?;
-                                image_util::PreparedImage::Dynamic(image_util::rotate_image_buffer(
-                                    image,
-                                    transform,
-                                    logical_size,
-                                    max_scale,
-                                ))
-                            }
-                            _ => return Err(Error::InvalidColor),
-                        };
-
+                        let image = frame_copy.get_image()?;
+                        let image = image_util::rotate_image_buffer(
+                            image,
+                            transform,
+                            logical_size,
+                            max_scale,
+                        );
                         Ok((image, logical_region))
                     })
                 })
@@ -1492,7 +1451,7 @@ impl WayshotConnection {
                             )
                             .in_scope(|| {
                                 tracing::debug!("Replacing parts of the final image");
-                                image.replace_into(&mut composite_image, x, y);
+                                replace(&mut composite_image, &image, x, y);
                             });
 
                             Ok(composite_image)

@@ -4,17 +4,21 @@ version = "0.7.3"
 authors.workspace = true
 description.workspace = true
 keywords.workspace = true
-license.workspace = true
+license = "BSD-2-Clause"
 repository.workspace = true
 edition.workspace = true
 
 [features]
-default = ["png"]
+default = ["png", "egl"]
 png = ["image/png"]
 jpeg = ["image/jpeg"]
 qoi = ["image/qoi"]
 webp = ["image/webp"]
 avif = ["image/avif"]
+egl = ["dep:gl", "dep:r-egl-wayland"]
+vulkan = ["dep:ash"]
+# Expose internal image/convert APIs for benchmarks only. Not part of stable API.
+bench = []
 
 [dependencies]
 tracing.workspace = true
@@ -35,5 +39,17 @@ wayland-backend = { version = "0.3", features = ["client_system"] }
 gbm = "0.18"
 drm = "0.14"
 
-gl.workspace = true
-r-egl-wayland.workspace = true
+gl = { workspace = true, optional = true }
+r-egl-wayland = { workspace = true, optional = true }
+ash = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "image_ops"
+harness = false
+
+[[bench]]
+name = "capture"
+harness = false

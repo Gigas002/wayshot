@@ -5,9 +5,8 @@ use std::{
 };
 
 use gbm::BufferObject;
-use image::{ColorType, DynamicImage, ImageBuffer, Pixel, Rgba};
+use image::{ColorType, DynamicImage, ImageBuffer, Pixel};
 use memmap2::MmapMut;
-use r_egl_wayland::{EGL_INSTALCE, r_egl as egl};
 use rustix::{
     fs::{self, SealFlags},
     io, shm,
@@ -44,21 +43,6 @@ impl Drop for DMAFrameGuard {
     }
 }
 
-pub struct EGLImageGuard {
-    pub image: egl::Image,
-    pub(crate) egl_display: egl::Display,
-}
-
-impl Drop for EGLImageGuard {
-    fn drop(&mut self) {
-        EGL_INSTALCE
-            .destroy_image(self.egl_display, self.image)
-            .unwrap_or_else(|e| {
-                tracing::error!("EGLimage destruction had error: {e}");
-            });
-    }
-}
-
 /// Type of frame supported by the compositor. For now we only support Argb8888, Xrgb8888, and
 /// Xbgr8888.
 ///
@@ -92,13 +76,15 @@ impl FrameFormat {
 }
 
 #[tracing::instrument(skip(frame_data))]
-fn create_image_buffer<P, C>(frame_format: &FrameFormat, frame_data: C) -> Result<ImageBuffer<P, C>>
+fn create_image_buffer<P>(
+    frame_format: &FrameFormat,
+    frame_data: Vec<u8>,
+) -> Result<ImageBuffer<P, Vec<u8>>>
 where
     P: Pixel<Subpixel = u8>,
-    C: std::ops::Deref<Target = [u8]>,
 {
     tracing::debug!("Creating image buffer");
-    ImageBuffer::from_raw(
+    ImageBuffer::from_vec(
         frame_format.size.width,
         frame_format.size.height,
         frame_data,
@@ -149,17 +135,6 @@ impl FrameCopy {
         self.frame_color_type = frame_color_type;
         self.color_converted = true;
         Ok(frame_color_type)
-    }
-
-    pub(crate) fn into_mmap_rgba_image_buffer(self) -> Result<ImageBuffer<Rgba<u8>, MmapMut>> {
-        if self.frame_color_type != ColorType::Rgba8 {
-            return Err(Error::InvalidColor);
-        }
-
-        match self.frame_data {
-            FrameData::Mmap(frame_mmap) => create_image_buffer(&self.frame_format, frame_mmap),
-            FrameData::GBMBo(_) => todo!(),
-        }
     }
 
     pub(crate) fn get_image(&mut self) -> Result<DynamicImage, Error> {

@@ -50,9 +50,12 @@ pub struct Cli {
     pub color: bool,
 
     // ─── Capture target (what to capture) ────────────────────────────────────
-    /// Interactively select a screen region to capture.
-    #[arg(short, long)]
-    pub geometry: bool,
+    /// Interactively select a screen region, or use a geometry string from a tool like slurp.
+    /// Examples:
+    ///   wayshot -g                    # interactive selection (requires selector feature)
+    ///   wayshot -g "$(slurp)"         # region from slurp (format: x,y widthxheight)
+    #[arg(short, long, value_name = "GEOMETRY", num_args = 0..=1, verbatim_doc_comment)]
+    pub geometry: Option<Option<String>>,
 
     /// Capture a specific output/display by name.
     #[arg(short, long, conflicts_with = "geometry")]
@@ -74,6 +77,15 @@ pub struct Cli {
     /// Include the cursor in the screenshot.
     #[arg(short, long)]
     pub cursor: bool,
+
+    /// Do not freeze the screen when selecting a region (geometry) or a point (color picker).
+    /// Selection happens on the live display; the capture is taken after selection.
+    #[arg(long)]
+    pub no_freeze: bool,
+
+    /// Wait this many milliseconds before taking the screenshot. No delay when unset.
+    #[arg(long, value_name = "MS")]
+    pub delay: Option<u32>,
 
     // ─── Output options (where/how to save the image) ─────────────────────────
     /// Image encoding format. Defaults to the FILE extension, then to `png`.
