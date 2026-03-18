@@ -3,15 +3,15 @@ name: Documentation
 on: [push, pull_request]
 
 jobs:
-  docs:
-    runs-on: ubuntu-latest
+    docs:
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
 
-      - name: Check docs
-        run: |
-          sudo apt update
-          sudo apt install --no-install-recommends scdoc
-          for file in $(find . -type f -iwholename "./docs/*.scd"); do scdoc < $file > /dev/null; done
+            - name: Check docs
+              run: |
+                  sudo apt update
+                  sudo apt install --no-install-recommends scdoc
+                  for file in $(find . -type f -iwholename "./docs/*.scd"); do scdoc < $file > /dev/null; done
