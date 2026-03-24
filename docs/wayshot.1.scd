@@ -127,6 +127,20 @@ Wayshot - Screenshot tool for compositors implementing zwlr_screencopy_v1 such a
 
 	_Requires the_ *notifications* _feature (enabled by default)._
 
+## Shell completions
+
+*--completions <SHELL>*
+	Print a shell completion script to stdout and exit. Supported shells:
+	bash, elvish, fish, pwsh, zsh, nushell.
+
+	_Requires the_ *completions* _feature (enabled by default)._
+
+	Examples:
+
+		wayshot --completions fish | source
+		wayshot --completions zsh > ~/.zfunc/_wayshot
+		wayshot --completions bash > /etc/bash_completion.d/wayshot
+
 ## Global options
 
 *--config <PATH>*
@@ -153,7 +167,7 @@ To build with a reduced set, use *--no-default-features* together with *--featur
 
 	cargo build --no-default-features --features clipboard,logger
 
-Available features: *avif*, *clipboard*, *color_picker*, *jxl*, *logger*, *notifications*, *selector*
+Available features: *avif*, *clipboard*, *color_picker*, *completions*, *jxl*, *logger*, *notifications*, *selector*
 
 # SEE ALSO
 	- wayshot(5)

@@ -84,6 +84,17 @@ Pick a hex color code, using ImageMagick:
 wayshot -g - | convert - -format '%[pixel:p{0,0}]' txt:-|grep -E "#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})" -o
 ```
 
+Shell completions:
+
+```bash
+wayshot --completions fish | source
+wayshot --completions zsh > ~/.zfunc/_wayshot
+wayshot --completions bash > /etc/bash_completion.d/wayshot
+wayshot --completions elvish >> ~/.config/elvish/rc.elv
+wayshot --completions pwsh >> $PROFILE
+wayshot --completions nushell | save -f ~/.config/nushell/completions/wayshot.nu
+```
+
 # Optional features
 
 All features are enabled in the default build. To reduce binary size or compile-time dependencies,
@@ -104,6 +115,7 @@ cargo build --no-default-features --features clipboard,logger,notifications
 | `logger`        | `--log-level` flag, tracing output to stderr                                                                          | tracing-subscriber |
 | `notifications` | Desktop notifications after each capture                                                                              | notify-rust        |
 | `selector`      | _-g_ without value: interactive region selection; _-g_ with value: geometry string (e.g. _$(slurp)_) always supported | libwaysip          |
+| `completions`   | `--completions <SHELL>` flag, generate shell completion scripts                                                       | clap_complete      |
 
 # Benchmarking
 
