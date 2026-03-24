@@ -76,11 +76,11 @@ Generate and install a completion script for your shell (requires *completions* 
 
 *zsh*
 
-	wayshot --completions zsh > ~/.zfunc/_wayshot
+	wayshot --completions zsh > ~/.zfunc/\_wayshot
 
 *bash*
 
-	wayshot --completions bash > /etc/bash_completion.d/wayshot
+	wayshot --completions bash > /etc/bash\_completion.d/wayshot
 
 *elvish*
 
@@ -93,7 +93,7 @@ Generate and install a completion script for your shell (requires *completions* 
 *nushell*
 
 	wayshot --completions nushell | save -f ~/.config/nushell/completions/wayshot.nu
-	# then add to env.nu: use ~/.config/nushell/completions/wayshot.nu *
+	# then source it from env.nu
 
 # AUTHORS
 

@@ -138,8 +138,8 @@ Wayshot - Screenshot tool for compositors implementing zwlr_screencopy_v1 such a
 	Examples:
 
 		wayshot --completions fish | source
-		wayshot --completions zsh > ~/.zfunc/_wayshot
-		wayshot --completions bash > /etc/bash_completion.d/wayshot
+		wayshot --completions zsh > ~/.zfunc/\_wayshot
+		wayshot --completions bash > /etc/bash\_completion.d/wayshot
 
 ## Global options
 
