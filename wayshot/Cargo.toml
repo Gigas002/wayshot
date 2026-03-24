@@ -21,7 +21,7 @@ repository.workspace = true
 #
 # GPU capture backend: use EGL/OpenGL (default) or Vulkan. Only one is needed for the
 # current CLI; choose "vulkan" to avoid EGL/GL dependencies.
-default = ["avif", "clipboard", "color_picker", "egl", "jxl", "logger", "notifications", "selector"]
+default = ["avif", "clipboard", "color_picker", "completions", "egl", "jxl", "logger", "notifications", "selector"]
 
 # Use libwayshot's EGL/OpenGL path (default). Enables capture_target_frame_eglimage, etc.
 egl = ["libwayshot/egl"]
@@ -65,6 +65,10 @@ logger = ["dep:tracing-subscriber"]
 # Pulls in: notify-rust
 notifications = ["dep:notify-rust"]
 
+# Adds the --completions <SHELL> CLI flag for generating shell completion scripts.
+# Pulls in: clap_complete, clap_complete_nushell
+completions = ["dep:clap_complete", "dep:clap_complete_nushell"]
+
 [build-dependencies]
 flate2 = "1.1"
 eyre = "0.6"
@@ -76,6 +80,8 @@ tracing-subscriber = { workspace = true, optional = true }
 libwayshot.workspace = true
 
 clap = { version = "4.6", features = ["derive"] }
+clap_complete = { version = "4.6", optional = true }
+clap_complete_nushell = { version = "4.6", optional = true }
 
 image = { workspace = true, features = [
 	"jpeg",

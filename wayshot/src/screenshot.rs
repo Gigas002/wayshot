@@ -38,7 +38,7 @@ pub fn capture(
     conn: &WayshotConnection,
     mode: &CaptureMode,
     cursor: bool,
-    freeze: bool,
+    #[cfg_attr(not(feature = "selector"), allow(unused_variables))] freeze: bool,
 ) -> Result<(image::DynamicImage, ShotResult)> {
     match mode {
         #[cfg(feature = "selector")]
