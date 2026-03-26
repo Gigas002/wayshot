@@ -35,7 +35,7 @@ pub(crate) struct AppSettings {
     pub(crate) cursor: bool,
     /// When true, freeze the screen before region/point selection; when false, select on live display.
     pub(crate) freeze: bool,
-    /// Delay in milliseconds to wait before capture; None = no delay.
+    /// Milliseconds to wait before capturing; `None` means no delay.
     pub(crate) delay: Option<u32>,
     /// Final encoding format, after resolving extension / flag / config precedence.
     pub(crate) encoding: EncodingFormat,
