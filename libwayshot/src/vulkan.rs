@@ -237,8 +237,8 @@ fn create_vulkan_context_for_bo(bo: &BufferObject<()>) -> Result<VulkanCaptureCo
         .queue_priorities(&[1.0]);
 
     let device_extensions = [
-        b"VK_KHR_external_memory_fd\0".as_ptr().cast(),
-        b"VK_EXT_external_memory_dma_buf\0".as_ptr().cast(),
+        c"VK_KHR_external_memory_fd".as_ptr(),
+        c"VK_EXT_external_memory_dma_buf".as_ptr(),
     ];
 
     let device_create_info = vk::DeviceCreateInfo::default()
