@@ -9,18 +9,21 @@ use std::fmt;
 use std::os::fd::IntoRawFd;
 use std::sync::Arc;
 
-use ash::Device;
 use ash::vk;
+use ash::{Device, Instance};
 use gbm::BufferObject;
 
 use crate::error::{Error, Result};
 use crate::region::Size;
+use std::os::fd::AsRawFd;
 
 /// Context required to create Vulkan images from DMA-BUF captures.
 /// Pass your own Vulkan device and queue; the device must support
 /// `VK_EXT_external_memory_dma_buf` and `VK_KHR_external_memory_fd`.
 #[derive(Clone)]
 pub struct VulkanCaptureContext {
+    /// Vulkan instance (kept alive while [`Self::device`] is in use).
+    pub instance: Arc<Instance>,
     /// Vulkan device. Must support DMA-BUF import extensions.
     pub device: Arc<Device>,
     /// Queue used for layout transitions (e.g. graphics queue).
@@ -204,4 +207,76 @@ pub fn import_dmabuf_to_vk_image(
             size,
         })
     }
+}
+
+/// Create a Vulkan device, import the DMA-BUF into a VkImage, then drop it (GPU path).
+pub(crate) fn touch_vulkan_import_for_bo(bo: &BufferObject<()>, size: Size<u32>) -> Result<()> {
+    let ctx = create_vulkan_context_for_bo(bo)?;
+    let _guard = import_dmabuf_to_vk_image(&ctx, bo, size)?;
+    Ok(())
+}
+
+fn create_vulkan_context_for_bo(bo: &BufferObject<()>) -> Result<VulkanCaptureContext> {
+    let entry = unsafe { ash::Entry::load() }
+        .map_err(|e| Error::VulkanError(format!("Vulkan loader: {e}")))?;
+
+    let instance: Arc<Instance> = Arc::new(
+        unsafe { entry.create_instance(&vk::InstanceCreateInfo::default(), None) }
+            .map_err(|e| Error::VulkanError(format!("Vulkan instance: {e}")))?,
+    );
+
+    let physical_devices = unsafe { instance.enumerate_physical_devices() }
+        .map_err(|e| Error::VulkanError(format!("enumerate_physical_devices: {e}")))?;
+    let physical = *physical_devices
+        .first()
+        .ok_or_else(|| Error::VulkanError("no physical device".into()))?;
+
+    let queue_family_index = 0u32;
+    let queue_info = vk::DeviceQueueCreateInfo::default()
+        .queue_family_index(queue_family_index)
+        .queue_priorities(&[1.0]);
+
+    let device_extensions = [
+        b"VK_KHR_external_memory_fd\0".as_ptr().cast(),
+        b"VK_EXT_external_memory_dma_buf\0".as_ptr().cast(),
+    ];
+
+    let device_create_info = vk::DeviceCreateInfo::default()
+        .queue_create_infos(std::slice::from_ref(&queue_info))
+        .enabled_extension_names(&device_extensions);
+
+    let device = unsafe { instance.create_device(physical, &device_create_info, None) }
+        .map_err(|e| Error::VulkanError(format!("Vulkan device: {e}")))?;
+    let device = Arc::new(device);
+
+    let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
+
+    let fd = bo
+        .fd_for_plane(0)
+        .map_err(|e| Error::VulkanError(format!("fd_for_plane: {e}")))?;
+    let fd_raw = fd.as_raw_fd();
+
+    let khr_fd = ash::khr::external_memory_fd::Device::new(instance.as_ref(), &device);
+    let mut memory_fd_props = vk::MemoryFdPropertiesKHR::default();
+    unsafe {
+        khr_fd.get_memory_fd_properties(
+            vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
+            fd_raw,
+            &mut memory_fd_props,
+        )
+    }
+    .map_err(|e| Error::VulkanError(format!("get_memory_fd_properties: {e:?}")))?;
+
+    let mask = memory_fd_props.memory_type_bits;
+    let memory_type_index = (0..32)
+        .find(|i| (mask & (1u32 << i)) != 0)
+        .ok_or_else(|| Error::VulkanError("no compatible memory type for DMA-BUF".into()))?;
+
+    Ok(VulkanCaptureContext {
+        instance,
+        device,
+        queue,
+        queue_family_index,
+        memory_type_index,
+    })
 }

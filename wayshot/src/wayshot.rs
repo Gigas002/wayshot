@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use eyre::Result;
-use libwayshot::WayshotConnection;
+use libwayshot::{CaptureBufferBackend, WayshotConnection};
 
 mod cli;
 #[cfg(feature = "clipboard")]
@@ -24,24 +24,38 @@ mod utils;
 use config::Config;
 use settings::{AppSettings, Command};
 
+// ─── Wayland connection ───────────────────────────────────────────────────────
+
+/// Open a [`WayshotConnection`]: SHM path for default backend, DMA-BUF (`new_with_dmabuf`) for GPU backends.
+fn connect_for_backend(backend: CaptureBufferBackend) -> Result<WayshotConnection> {
+    if backend == CaptureBufferBackend::Shm {
+        WayshotConnection::new().map_err(|e| eyre::eyre!("{e}"))
+    } else {
+        WayshotConnection::new_with_dmabuf("/dev/dri/renderD128").map_err(|e| eyre::eyre!("{e}"))
+    }
+}
+
 fn main() -> Result<()> {
     let cli = cli::Cli::parse();
 
+    // ─── Shell completions ───────────────────────────────────────────────────
     #[cfg(feature = "completions")]
     if let Some(shell) = cli.completions {
         utils::print_completions(shell);
         return Ok(());
     }
 
+    // ─── Config ─────────────────────────────────────────────────────────────
     let config_path = cli.config.clone().unwrap_or(Config::get_default_path());
     let config = Config::load(&config_path).unwrap_or_default();
 
     #[cfg(feature = "logger")]
     logger::setup(&cli, &config);
 
-    let settings = AppSettings::resolve(&cli, &config);
+    // ─── Resolved CLI + config ───────────────────────────────────────────────
+    let settings = AppSettings::resolve(&cli, &config)?;
 
-    let connection = WayshotConnection::new()?;
+    let connection = connect_for_backend(settings.capture_backend)?;
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());
 
@@ -70,7 +84,13 @@ fn main() -> Result<()> {
             if let Some(ms) = settings.delay {
                 std::thread::sleep(Duration::from_millis(ms as u64));
             }
-            let result = screenshot::capture(&connection, &mode, settings.cursor, settings.freeze);
+            let result = screenshot::capture(
+                &connection,
+                &mode,
+                settings.cursor,
+                settings.freeze,
+                settings.capture_backend,
+            );
             match result {
                 Ok((image_buffer, shot_result)) => {
                     let encoded = utils::encode_image(

@@ -13,12 +13,10 @@ use std::time::Duration;
 use wayland_client::Connection;
 
 /// Setup connection with DMA-BUF (required for both EGL and Vulkan capture).
-/// Uses first available DRI device; set LIBWAYSHOT_DRI_DEVICE to override.
+/// Uses the default render node (`/dev/dri/renderD128`).
 fn connect_with_dmabuf() -> Result<(WayshotConnection, WayshotTarget), Box<dyn std::error::Error>> {
     let conn = Connection::connect_to_env()?;
-    let dri = std::env::var("LIBWAYSHOT_DRI_DEVICE")
-        .unwrap_or_else(|_| "/dev/dri/renderD128".to_string());
-    let wayshot = WayshotConnection::from_connection_with_dmabuf(conn, dri)?;
+    let wayshot = WayshotConnection::from_connection_with_dmabuf(conn, "/dev/dri/renderD128")?;
     let outputs = wayshot.get_all_outputs();
     let output = outputs.first().ok_or("no outputs")?;
     let target = WayshotTarget::from(output.clone());
@@ -82,7 +80,7 @@ fn bench_vulkan_capture(c: &mut Criterion) {
 
     let instance = match unsafe { entry.create_instance(&vk::InstanceCreateInfo::default(), None) }
     {
-        Ok(i) => i,
+        Ok(i) => std::sync::Arc::new(i),
         Err(e) => {
             eprintln!("Vulkan bench skipped (instance creation failed): {}", e);
             return;
@@ -132,7 +130,7 @@ fn bench_vulkan_capture(c: &mut Criterion) {
     };
     let fd_raw = fd.as_raw_fd();
 
-    let khr_fd = ash::khr::external_memory_fd::Device::new(&instance, &device);
+    let khr_fd = ash::khr::external_memory_fd::Device::new(instance.as_ref(), &device);
     let mut memory_fd_props = vk::MemoryFdPropertiesKHR::default();
     let memory_type_index = match unsafe {
         khr_fd.get_memory_fd_properties(
@@ -152,6 +150,7 @@ fn bench_vulkan_capture(c: &mut Criterion) {
     };
 
     let context = libwayshot::VulkanCaptureContext {
+        instance: Arc::clone(&instance),
         device: Arc::clone(&device),
         queue,
         queue_family_index,

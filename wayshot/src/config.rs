@@ -42,6 +42,8 @@ impl Config {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Base {
     pub output: Option<String>,
+    /// `shm` (default), `egl`, or `vulkan` — see libwayshot `CaptureBufferBackend`.
+    pub backend: Option<String>,
     pub cursor: Option<bool>,
     pub freeze: Option<bool>,
     pub delay: Option<u32>,
@@ -56,6 +58,7 @@ impl Default for Base {
     fn default() -> Self {
         Base {
             output: None,
+            backend: None,
             cursor: Some(false),
             freeze: Some(true),
             delay: None,

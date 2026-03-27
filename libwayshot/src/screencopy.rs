@@ -21,6 +21,21 @@ use crate::{
     region::{LogicalRegion, Size},
 };
 
+/// Holds either an SHM [`FrameGuard`] or a DMA-BUF [`DMAFrameGuard`] for the Wayland buffer used in overlays.
+pub enum FrameSurfaceGuard {
+    Shm(FrameGuard),
+    Dma(DMAFrameGuard),
+}
+
+impl FrameSurfaceGuard {
+    pub fn buffer(&self) -> &WlBuffer {
+        match self {
+            FrameSurfaceGuard::Shm(g) => &g.buffer,
+            FrameSurfaceGuard::Dma(g) => &g.buffer,
+        }
+    }
+}
+
 pub struct FrameGuard {
     pub buffer: WlBuffer,
     pub shm_pool: WlShmPool,
@@ -95,6 +110,8 @@ where
 #[derive(Debug)]
 pub enum FrameData {
     Mmap(MmapMut),
+    /// CPU-owned copy (e.g. after DMA-BUF / GBM read).
+    Bytes(Vec<u8>),
     GBMBo(BufferObject<()>),
 }
 /// The copied frame comprising of the FrameFormat, ColorType (Rgba8), and a memory backed shm
@@ -118,8 +135,12 @@ impl FrameCopy {
         }
         let frame_color_type = match create_converter(self.frame_format.format) {
             Some(converter) => {
-                let FrameData::Mmap(raw) = &mut self.frame_data else {
-                    return Err(Error::InvalidColor);
+                let raw: &mut [u8] = match &mut self.frame_data {
+                    FrameData::Mmap(raw) => raw,
+                    FrameData::Bytes(bytes) => bytes.as_mut_slice(),
+                    FrameData::GBMBo(_) => {
+                        return Err(Error::InvalidColor);
+                    }
                 };
                 converter.convert_inplace(raw)
             }
@@ -152,19 +173,37 @@ impl TryFrom<&FrameCopy> for DynamicImage {
             ColorType::Rgb8 => {
                 let frame_data = match &value.frame_data {
                     FrameData::Mmap(frame_mmap) => frame_mmap.to_vec(),
-                    FrameData::GBMBo(_) => todo!(),
+                    FrameData::Bytes(b) => b.clone(),
+                    FrameData::GBMBo(_) => {
+                        return Err(Error::InvalidColor);
+                    }
                 };
                 Self::ImageRgb8(create_image_buffer(&value.frame_format, frame_data)?)
             }
             ColorType::Rgba8 => {
                 let frame_data = match &value.frame_data {
                     FrameData::Mmap(frame_mmap) => frame_mmap.to_vec(),
-                    FrameData::GBMBo(_) => todo!(),
+                    FrameData::Bytes(b) => b.clone(),
+                    FrameData::GBMBo(_) => {
+                        return Err(Error::InvalidColor);
+                    }
                 };
                 Self::ImageRgba8(create_image_buffer(&value.frame_format, frame_data)?)
             }
             _ => return Err(Error::InvalidColor),
         })
+    }
+}
+
+/// Map DRM fourcc (from DMA-BUF frame metadata) to `wl_shm::Format` for color conversion.
+pub(crate) fn drm_fourcc_to_wl_shm(fourcc: u32) -> Result<wl_shm::Format, Error> {
+    match fourcc {
+        0x34325241 => Ok(wl_shm::Format::Argb8888),
+        0x34325258 => Ok(wl_shm::Format::Xrgb8888),
+        0x34324241 => Ok(wl_shm::Format::Abgr8888),
+        0x34324258 => Ok(wl_shm::Format::Xbgr8888),
+        0x34324752 => Ok(wl_shm::Format::Bgr888),
+        _ => Err(Error::NoSupportedBufferFormat),
     }
 }
 

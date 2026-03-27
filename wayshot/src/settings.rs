@@ -4,6 +4,8 @@ use crate::cli::Cli;
 use crate::config::{self, Config};
 use crate::screenshot::CaptureMode;
 use crate::utils::{self, EncodingFormat};
+use eyre::Result;
+use libwayshot::CaptureBufferBackend;
 
 // ─── Command ──────────────────────────────────────────────────────────────────
 
@@ -51,10 +53,40 @@ pub(crate) struct AppSettings {
     pub(crate) clipboard: bool,
     #[cfg(feature = "notifications")]
     pub(crate) notifications: bool,
+    /// [`libwayshot::CaptureBufferBackend`]: how frames are copied from the compositor (`shm`, `egl`, `vulkan`).
+    pub(crate) capture_backend: CaptureBufferBackend,
+}
+
+/// Map `--backend` / `[base] backend` strings to [`CaptureBufferBackend`]. Unknown or unavailable names return `None`.
+fn parse_capture_backend(s: &str) -> Option<CaptureBufferBackend> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "" | "shm" | "default" | "wl" => Some(CaptureBufferBackend::Shm),
+        "egl" => {
+            #[cfg(feature = "egl")]
+            {
+                Some(CaptureBufferBackend::Egl)
+            }
+            #[cfg(not(feature = "egl"))]
+            {
+                None
+            }
+        }
+        "vulkan" => {
+            #[cfg(feature = "vulkan")]
+            {
+                Some(CaptureBufferBackend::Vulkan)
+            }
+            #[cfg(not(feature = "vulkan"))]
+            {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 impl AppSettings {
-    pub(crate) fn resolve(cli: &Cli, config: &Config) -> Self {
+    pub(crate) fn resolve(cli: &Cli, config: &Config) -> Result<Self> {
         let base = config.base.clone().unwrap_or_default();
         let file_config = config.file.clone().unwrap_or_default();
         let encoding_config = config.encoding.clone().unwrap_or_default();
@@ -115,6 +147,10 @@ impl AppSettings {
             &mut stdout_print,
         );
 
+        // ── Capture backend ───────────────────────────────────────────────────
+        // CLI --backend overrides config `[base] backend`; default is SHM.
+        let capture_backend = Self::resolve_capture_backend(cli, &base)?;
+
         // ── Command ───────────────────────────────────────────────────────────
         // Query commands are checked first; screenshot mode is the default.
         let command = 'cmd: {
@@ -135,7 +171,7 @@ impl AppSettings {
             Command::Screenshot(Self::resolve_capture_mode(cli, output))
         };
 
-        AppSettings {
+        Ok(AppSettings {
             command,
             cursor,
             freeze,
@@ -149,7 +185,20 @@ impl AppSettings {
             clipboard: cli.clipboard || base.clipboard.unwrap_or_default(),
             #[cfg(feature = "notifications")]
             notifications: !cli.silent && base.notifications.unwrap_or(true),
-        }
+            capture_backend,
+        })
+    }
+
+    fn resolve_capture_backend(cli: &Cli, base: &config::Base) -> Result<CaptureBufferBackend> {
+        let raw = cli.backend.as_deref().or_else(|| base.backend.as_deref());
+        let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+            return Ok(CaptureBufferBackend::Shm);
+        };
+        parse_capture_backend(s).ok_or_else(|| {
+            eyre::eyre!(
+                "unknown capture backend '{s}'. Use `shm` (default), `egl`, or `vulkan` (only if this build includes that feature)."
+            )
+        })
     }
 
     fn resolve_capture_mode(cli: &Cli, output: Option<String>) -> CaptureMode {

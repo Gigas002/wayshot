@@ -305,28 +305,28 @@ fn png_compression_and_filter() {
 fn resolve_command_list_outputs() {
     let cli = parse(&["--list-outputs"]).unwrap();
     let config = Config::default();
-    let settings = AppSettings::resolve(&cli, &config);
+    let settings = AppSettings::resolve(&cli, &config).unwrap();
     assert!(matches!(settings.command, Command::ListOutputs));
 }
 
 #[test]
 fn resolve_command_list_outputs_info() {
     let cli = parse(&["--list-outputs-info"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(matches!(settings.command, Command::ListOutputsInfo));
 }
 
 #[test]
 fn resolve_command_list_toplevels() {
     let cli = parse(&["--list-toplevels"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(matches!(settings.command, Command::ListToplevels));
 }
 
 #[test]
 fn resolve_command_screenshot_geometry_region() {
     let cli = parse(&["--geometry", "5,10 20x30"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     match &settings.command {
         Command::Screenshot(crate::screenshot::CaptureMode::GeometryRegion(r)) => {
             assert_eq!(r.inner.position.x, 5);
@@ -341,7 +341,7 @@ fn resolve_command_screenshot_geometry_region() {
 #[test]
 fn resolve_command_screenshot_output() {
     let cli = parse(&["--output", "HDMI-1"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     match &settings.command {
         Command::Screenshot(crate::screenshot::CaptureMode::Output(name)) => {
             assert_eq!(name, "HDMI-1");
@@ -353,7 +353,7 @@ fn resolve_command_screenshot_output() {
 #[test]
 fn resolve_command_screenshot_choose_output() {
     let cli = parse(&["--choose-output"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(matches!(
         settings.command,
         Command::Screenshot(crate::screenshot::CaptureMode::ChooseOutput)
@@ -363,7 +363,7 @@ fn resolve_command_screenshot_choose_output() {
 #[test]
 fn resolve_command_screenshot_toplevel() {
     let cli = parse(&["--toplevel", "firefox Firefox"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     match &settings.command {
         Command::Screenshot(crate::screenshot::CaptureMode::Toplevel(name)) => {
             assert_eq!(name, "firefox Firefox");
@@ -375,7 +375,7 @@ fn resolve_command_screenshot_toplevel() {
 #[test]
 fn resolve_command_screenshot_all_default() {
     let cli = parse(&[]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(matches!(
         settings.command,
         Command::Screenshot(crate::screenshot::CaptureMode::All)
@@ -385,35 +385,35 @@ fn resolve_command_screenshot_all_default() {
 #[test]
 fn resolve_cursor_cli_overrides() {
     let cli = parse(&["--list-outputs", "--cursor"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(settings.cursor);
 }
 
 #[test]
 fn resolve_freeze_no_freeze_flag() {
     let cli = parse(&["--list-outputs", "--no-freeze"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(!settings.freeze);
 }
 
 #[test]
 fn resolve_delay_from_cli() {
     let cli = parse(&["--list-outputs", "--delay", "250"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert_eq!(settings.delay, Some(250));
 }
 
 #[test]
 fn resolve_encoding_from_cli() {
     let cli = parse(&["--list-outputs", "--encoding", "webp"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert_eq!(settings.encoding, EncodingFormat::Webp);
 }
 
 #[test]
 fn resolve_encoding_from_file_extension() {
     let cli = parse(&["--list-outputs", "/tmp/out.jpeg"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert_eq!(settings.encoding, EncodingFormat::Jpg);
 }
 
@@ -422,7 +422,7 @@ fn resolve_encoding_from_config() {
     let cli = parse(&["--list-outputs"]).unwrap();
     let mut config = Config::default();
     config.file.as_mut().unwrap().encoding = Some(EncodingFormat::Qoi);
-    let settings = AppSettings::resolve(&cli, &config);
+    let settings = AppSettings::resolve(&cli, &config).unwrap();
     assert_eq!(settings.encoding, EncodingFormat::Qoi);
 }
 
@@ -430,7 +430,7 @@ fn resolve_encoding_from_config() {
 fn resolve_file_stdout_when_dash() {
     let cli = parse(&["--list-outputs", "-"]).unwrap();
     let config = Config::default();
-    let settings = AppSettings::resolve(&cli, &config);
+    let settings = AppSettings::resolve(&cli, &config).unwrap();
     assert!(settings.stdout_print);
     assert!(settings.file.is_none());
 }
@@ -438,7 +438,7 @@ fn resolve_file_stdout_when_dash() {
 #[test]
 fn resolve_file_path_from_cli() {
     let cli = parse(&["--list-outputs", "/tmp/my.png"]).unwrap();
-    let settings = AppSettings::resolve(&cli, &Config::default());
+    let settings = AppSettings::resolve(&cli, &Config::default()).unwrap();
     assert!(settings.file.is_some());
     assert!(
         settings

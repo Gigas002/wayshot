@@ -3,6 +3,7 @@
 //!
 //! To get started, look at [`WayshotConnection`].
 
+mod capture_backend;
 mod convert;
 mod dispatch;
 #[cfg(feature = "egl")]
@@ -28,7 +29,8 @@ use image::DynamicImage;
 use image::imageops::replace;
 use memmap2::MmapMut;
 use screencopy::{
-    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
+    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard,
+    FrameSurfaceGuard, create_shm_fd,
 };
 use tracing::debug;
 use wayland_client::{
@@ -78,7 +80,9 @@ use wayland_protocols_wlr::{
 
 use crate::dispatch::{CaptureFrameState, FrameState, OutputCaptureState, WayshotState};
 
+pub use crate::screencopy::FrameSurfaceGuard;
 pub use crate::{
+    capture_backend::CaptureBufferBackend,
     output::OutputInfo,
     region::{EmbeddedRegion, LogicalRegion, RegionCapturer, Size, TopLevel},
 };
@@ -181,6 +185,15 @@ impl WayshotConnection {
         let conn = Connection::connect_to_env()?;
 
         Self::from_connection(conn)
+    }
+
+    /// Like [`new`](Self::new), but initializes GBM / DMA-BUF on the given DRI render node
+    /// (e.g. `/dev/dri/renderD128`). Required for [`capture_target_frame_dmabuf`](Self::capture_target_frame_dmabuf),
+    /// [`capture_target_frame_eglimage`](Self::capture_target_frame_eglimage), and
+    /// [`capture_target_frame_vk_image`](Self::capture_target_frame_vk_image).
+    pub fn new_with_dmabuf<P: AsRef<Path>>(device_path: P) -> Result<Self> {
+        let conn = Connection::connect_to_env()?;
+        Self::from_connection_with_dmabuf(conn, device_path)
     }
 
     /// Recommended if you already have a [`wayland_client::Connection`].
@@ -1192,16 +1205,97 @@ impl WayshotConnection {
         Ok((frame_copy, frame_guard))
     }
 
-    pub fn capture_frame_copies(
+    fn read_linear_gbm_bo(bo: &BufferObject<()>, w: u32, h: u32) -> std::io::Result<Vec<u8>> {
+        bo.map(0, 0, w, h, |m| m.buffer().to_vec())
+    }
+
+    #[cfg(any(feature = "egl", feature = "vulkan"))]
+    fn capture_frame_copy_gpu(
+        &self,
+        output_info: &OutputInfo,
+        cursor_overlay: bool,
+        capture_region: Option<EmbeddedRegion>,
+        backend: CaptureBufferBackend,
+    ) -> Result<(FrameCopy, FrameSurfaceGuard)> {
+        let target = WayshotTarget::from(output_info.clone());
+        let (dma_fmt, dma_guard, bo) =
+            self.capture_target_frame_dmabuf(&target, cursor_overlay, capture_region)?;
+        #[cfg(feature = "egl")]
+        if matches!(backend, CaptureBufferBackend::Egl) {
+            crate::egl::touch_egl_import_for_dmabuf(&self.conn.display(), &bo, &dma_fmt)?;
+        }
+        #[cfg(feature = "vulkan")]
+        if matches!(backend, CaptureBufferBackend::Vulkan) {
+            crate::vulkan::touch_vulkan_import_for_bo(&bo, dma_fmt.size)?;
+        }
+        let stride = bo.stride();
+        let frame_format = FrameFormat {
+            format: screencopy::drm_fourcc_to_wl_shm(dma_fmt.format)?,
+            size: dma_fmt.size,
+            stride,
+        };
+        let bytes = Self::read_linear_gbm_bo(&bo, dma_fmt.size.width, dma_fmt.size.height)?;
+        let rotated_physical_size = match output_info.transform {
+            Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270 => {
+                Size {
+                    width: dma_fmt.size.height,
+                    height: dma_fmt.size.width,
+                }
+            }
+            _ => dma_fmt.size,
+        };
+        let frame_copy = FrameCopy {
+            frame_format,
+            frame_color_type: image::ColorType::Rgb8,
+            frame_data: FrameData::Bytes(bytes),
+            transform: output_info.transform,
+            logical_region: capture_region
+                .map(|r| r.logical())
+                .unwrap_or(output_info.logical_region),
+            physical_size: rotated_physical_size,
+            color_converted: false,
+        };
+        Ok((frame_copy, FrameSurfaceGuard::Dma(dma_guard)))
+    }
+
+    fn capture_frame_copies(
         &self,
         output_capture_regions: &[(OutputInfo, Option<EmbeddedRegion>)],
         cursor_overlay: bool,
-    ) -> Result<Vec<(FrameCopy, FrameGuard, OutputInfo)>> {
+        backend: CaptureBufferBackend,
+    ) -> Result<Vec<(FrameCopy, FrameSurfaceGuard, OutputInfo)>> {
         output_capture_regions
             .iter()
-            .map(|(output_info, capture_region)| {
-                self.capture_frame_copy(output_info, cursor_overlay, *capture_region)
-                    .map(|(frame_copy, frame_guard)| (frame_copy, frame_guard, output_info.clone()))
+            .map(|(output_info, capture_region)| -> Result<_> {
+                match backend {
+                    CaptureBufferBackend::Shm => self
+                        .capture_frame_copy(output_info, cursor_overlay, *capture_region)
+                        .map(|(frame_copy, frame_guard)| {
+                            (
+                                frame_copy,
+                                FrameSurfaceGuard::Shm(frame_guard),
+                                output_info.clone(),
+                            )
+                        }),
+                    #[cfg(feature = "egl")]
+                    CaptureBufferBackend::Egl => self
+                        .capture_frame_copy_gpu(
+                            output_info,
+                            cursor_overlay,
+                            *capture_region,
+                            backend,
+                        )
+                        .map(|(fc, fg)| (fc, fg, output_info.clone())),
+                    #[cfg(feature = "vulkan")]
+                    CaptureBufferBackend::Vulkan => self
+                        .capture_frame_copy_gpu(
+                            output_info,
+                            cursor_overlay,
+                            *capture_region,
+                            backend,
+                        )
+                        .map(|(fc, fg)| (fc, fg, output_info.clone())),
+                }
             })
             .collect()
     }
@@ -1210,7 +1304,7 @@ impl WayshotConnection {
     /// render the screen captures on them and use the callback to select a region from them
     fn overlay_frames_and_select_region<F>(
         &self,
-        frames: &[(FrameCopy, FrameGuard, OutputInfo)],
+        frames: &[(FrameCopy, FrameSurfaceGuard, OutputInfo)],
         callback: F,
     ) -> Result<LogicalRegion>
     where
@@ -1287,7 +1381,7 @@ impl WayshotConnection {
 
                 surface.set_buffer_transform(output_info.transform);
                 // surface.set_buffer_scale(output_info.scale());
-                surface.attach(Some(&frame_guard.buffer), 0, 0);
+                surface.attach(Some(frame_guard.buffer()), 0, 0);
 
                 if let Some(viewporter) = viewporter.as_ref() {
                     let viewport = viewporter.get_viewport(&surface, &qh, ());
@@ -1325,7 +1419,11 @@ impl WayshotConnection {
         &self,
         region_capturer: RegionCapturer,
         cursor_overlay: bool,
+        backend: CaptureBufferBackend,
     ) -> Result<DynamicImage> {
+        if !matches!(backend, CaptureBufferBackend::Shm) && !self.has_gbm() {
+            return Err(Error::NoDMAStateError);
+        }
         let ext_top_level_support = self.toplevel_capture_support();
         let outputs_capture_regions: Vec<(OutputInfo, Option<EmbeddedRegion>)> =
             match region_capturer {
@@ -1366,7 +1464,7 @@ impl WayshotConnection {
                     })
                     .collect(),
                 RegionCapturer::TopLevel(ref toplevel) => {
-                    return self.capture_toplevel(toplevel.as_ref(), cursor_overlay);
+                    return self.capture_toplevel(toplevel.as_ref(), cursor_overlay, backend);
                 }
                 RegionCapturer::Freeze(_) => self
                     .get_all_outputs()
@@ -1375,7 +1473,8 @@ impl WayshotConnection {
                     .collect(),
             };
 
-        let frames = self.capture_frame_copies(&outputs_capture_regions, cursor_overlay)?;
+        let frames =
+            self.capture_frame_copies(&outputs_capture_regions, cursor_overlay, backend)?;
 
         let capture_region: LogicalRegion = match region_capturer {
             RegionCapturer::Outputs(outputs) => outputs.as_slice().try_into()?,
@@ -1470,7 +1569,20 @@ impl WayshotConnection {
         capture_region: LogicalRegion,
         cursor_overlay: bool,
     ) -> Result<DynamicImage> {
-        self.screenshot_region_capturer(RegionCapturer::Region(capture_region), cursor_overlay)
+        self.screenshot_with_backend(capture_region, cursor_overlay, CaptureBufferBackend::Shm)
+    }
+
+    pub fn screenshot_with_backend(
+        &self,
+        capture_region: LogicalRegion,
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage> {
+        self.screenshot_region_capturer(
+            RegionCapturer::Region(capture_region),
+            cursor_overlay,
+            backend,
+        )
     }
 
     /// Take a screenshot, overlay the screenshot, run the callback, and then
@@ -1479,7 +1591,23 @@ impl WayshotConnection {
     where
         F: Fn(&WayshotConnection) -> Result<LogicalRegion> + 'static,
     {
-        self.screenshot_region_capturer(RegionCapturer::Freeze(Box::new(callback)), cursor_overlay)
+        self.screenshot_freeze_with_backend(callback, cursor_overlay, CaptureBufferBackend::Shm)
+    }
+
+    pub fn screenshot_freeze_with_backend<F>(
+        &self,
+        callback: F,
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage>
+    where
+        F: Fn(&WayshotConnection) -> Result<LogicalRegion> + 'static,
+    {
+        self.screenshot_region_capturer(
+            RegionCapturer::Freeze(Box::new(callback)),
+            cursor_overlay,
+            backend,
+        )
     }
 
     /// Take a screenshot from one output
@@ -1488,8 +1616,41 @@ impl WayshotConnection {
         output_info: &OutputInfo,
         cursor_overlay: bool,
     ) -> Result<DynamicImage> {
-        let (mut frame_copy, _) = self.capture_frame_copy(output_info, cursor_overlay, None)?;
-        frame_copy.get_image()
+        self.screenshot_single_output_with_backend(
+            output_info,
+            cursor_overlay,
+            CaptureBufferBackend::Shm,
+        )
+    }
+
+    pub fn screenshot_single_output_with_backend(
+        &self,
+        output_info: &OutputInfo,
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage> {
+        if !matches!(backend, CaptureBufferBackend::Shm) && !self.has_gbm() {
+            return Err(Error::NoDMAStateError);
+        }
+        match backend {
+            CaptureBufferBackend::Shm => {
+                let (mut frame_copy, _) =
+                    self.capture_frame_copy(output_info, cursor_overlay, None)?;
+                frame_copy.get_image()
+            }
+            #[cfg(feature = "egl")]
+            CaptureBufferBackend::Egl => {
+                let (mut frame_copy, _) =
+                    self.capture_frame_copy_gpu(output_info, cursor_overlay, None, backend)?;
+                frame_copy.get_image()
+            }
+            #[cfg(feature = "vulkan")]
+            CaptureBufferBackend::Vulkan => {
+                let (mut frame_copy, _) =
+                    self.capture_frame_copy_gpu(output_info, cursor_overlay, None, backend)?;
+                frame_copy.get_image()
+            }
+        }
     }
 
     /// Take a screenshot from all of the specified outputs.
@@ -1498,16 +1659,37 @@ impl WayshotConnection {
         outputs: &[OutputInfo],
         cursor_overlay: bool,
     ) -> Result<DynamicImage> {
+        self.screenshot_outputs_with_backend(outputs, cursor_overlay, CaptureBufferBackend::Shm)
+    }
+
+    pub fn screenshot_outputs_with_backend(
+        &self,
+        outputs: &[OutputInfo],
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage> {
         if outputs.is_empty() {
             return Err(Error::NoOutputs);
         }
 
-        self.screenshot_region_capturer(RegionCapturer::Outputs(outputs.to_owned()), cursor_overlay)
+        self.screenshot_region_capturer(
+            RegionCapturer::Outputs(outputs.to_owned()),
+            cursor_overlay,
+            backend,
+        )
     }
 
     /// Take a screenshot from all accessible outputs.
     pub fn screenshot_all(&self, cursor_overlay: bool) -> Result<DynamicImage> {
-        self.screenshot_outputs(self.get_all_outputs(), cursor_overlay)
+        self.screenshot_all_with_backend(cursor_overlay, CaptureBufferBackend::Shm)
+    }
+
+    pub fn screenshot_all_with_backend(
+        &self,
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage> {
+        self.screenshot_outputs_with_backend(self.get_all_outputs(), cursor_overlay, backend)
     }
 
     /// Take a screenshot from a specific toplevel (window).
@@ -1516,9 +1698,19 @@ impl WayshotConnection {
         toplevel: &TopLevel,
         cursor_overlay: bool,
     ) -> Result<DynamicImage> {
+        self.screenshot_toplevel_with_backend(toplevel, cursor_overlay, CaptureBufferBackend::Shm)
+    }
+
+    pub fn screenshot_toplevel_with_backend(
+        &self,
+        toplevel: &TopLevel,
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage> {
         self.screenshot_region_capturer(
             RegionCapturer::TopLevel(toplevel.to_owned()),
             cursor_overlay,
+            backend,
         )
     }
 
@@ -1628,19 +1820,35 @@ impl WayshotConnection {
         &self,
         toplevel: &ExtForeignToplevelHandleV1,
         cursor_overlay: bool,
+        backend: CaptureBufferBackend,
     ) -> Result<DynamicImage> {
-        // Back the buffer with a shm file of the required size
+        match backend {
+            CaptureBufferBackend::Shm => self.capture_toplevel_shm(toplevel, cursor_overlay),
+            #[cfg(feature = "egl")]
+            CaptureBufferBackend::Egl => {
+                self.capture_toplevel_gpu(toplevel, cursor_overlay, CaptureBufferBackend::Egl)
+            }
+            #[cfg(feature = "vulkan")]
+            CaptureBufferBackend::Vulkan => {
+                self.capture_toplevel_gpu(toplevel, cursor_overlay, CaptureBufferBackend::Vulkan)
+            }
+        }
+    }
+
+    fn capture_toplevel_shm(
+        &self,
+        toplevel: &ExtForeignToplevelHandleV1,
+        cursor_overlay: bool,
+    ) -> Result<DynamicImage> {
         let fd = create_shm_fd()?;
         let memfile = File::from(fd);
-        // Determine a suitable shm FrameFormat for this frame
         let (frame_format, _) =
             self.capture_toplevel_frame_shm_from_file(cursor_overlay, toplevel, &memfile)?;
 
-        // Map and convert to image
         let frame_mmap = unsafe { MmapMut::map_mut(&memfile)? };
         let mut frame_copy = FrameCopy {
             frame_format,
-            frame_color_type: image::ColorType::Rgb8, // will be updated by get_image
+            frame_color_type: image::ColorType::Rgb8,
             frame_data: FrameData::Mmap(frame_mmap),
             transform: Transform::Normal,
             logical_region: LogicalRegion {
@@ -1650,6 +1858,49 @@ impl WayshotConnection {
                 },
             },
             physical_size: frame_format.size,
+            color_converted: false,
+        };
+
+        frame_copy.get_image()
+    }
+
+    #[cfg(any(feature = "egl", feature = "vulkan"))]
+    fn capture_toplevel_gpu(
+        &self,
+        toplevel: &ExtForeignToplevelHandleV1,
+        cursor_overlay: bool,
+        backend: CaptureBufferBackend,
+    ) -> Result<DynamicImage> {
+        let target = WayshotTarget::Toplevel(toplevel.clone());
+        let (dma_fmt, _dma_guard, bo) =
+            self.capture_target_frame_dmabuf(&target, cursor_overlay, None)?;
+        #[cfg(feature = "egl")]
+        if matches!(backend, CaptureBufferBackend::Egl) {
+            crate::egl::touch_egl_import_for_dmabuf(&self.conn.display(), &bo, &dma_fmt)?;
+        }
+        #[cfg(feature = "vulkan")]
+        if matches!(backend, CaptureBufferBackend::Vulkan) {
+            crate::vulkan::touch_vulkan_import_for_bo(&bo, dma_fmt.size)?;
+        }
+        let stride = bo.stride();
+        let frame_format = FrameFormat {
+            format: screencopy::drm_fourcc_to_wl_shm(dma_fmt.format)?,
+            size: dma_fmt.size,
+            stride,
+        };
+        let bytes = Self::read_linear_gbm_bo(&bo, dma_fmt.size.width, dma_fmt.size.height)?;
+        let mut frame_copy = FrameCopy {
+            frame_format,
+            frame_color_type: image::ColorType::Rgb8,
+            frame_data: FrameData::Bytes(bytes),
+            transform: Transform::Normal,
+            logical_region: LogicalRegion {
+                inner: crate::region::Region {
+                    position: crate::region::Position { x: 0, y: 0 },
+                    size: dma_fmt.size,
+                },
+            },
+            physical_size: dma_fmt.size,
             color_converted: false,
         };
 

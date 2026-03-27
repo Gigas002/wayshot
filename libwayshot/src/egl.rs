@@ -16,6 +16,19 @@ use wayland_client::protocol::wl_display::WlDisplay;
 use crate::error::{Error, Result};
 use crate::screencopy::DMAFrameFormat;
 
+/// Create and destroy an EGLImage for this DMA-BUF (GPU import path), without reading pixels here.
+pub(crate) fn touch_egl_import_for_dmabuf(
+    display: &WlDisplay,
+    bo: &BufferObject<()>,
+    frame_format: &DMAFrameFormat,
+) -> Result<()> {
+    let egl_display = get_egl_display_wl(display)?;
+    initialize_egl(egl_display)?;
+    let g = create_egl_image_from_dmabuf(egl_display, bo, frame_format)?;
+    drop(g);
+    Ok(())
+}
+
 /// EGL display type (re-exported for API use).
 pub type EglDisplay = egl::Display;
 

@@ -41,10 +41,7 @@ Each capture benchmark measures **time per frame** (roundtrip to compositor + bu
 ## Requirements for capture benchmarks
 
 1. **Wayland session** – run inside Sway, Hyprland, River, etc. `WAYLAND_DISPLAY` must be set.
-2. **DRI device** – e.g. `/dev/dri/renderD128`. Override with:
-    ```bash
-    export LIBWAYSHOT_DRI_DEVICE=/dev/dri/card0
-    ```
+2. **DRI render node** – benchmarks open `/dev/dri/renderD128` (typical default GPU render node on Linux).
 3. **Vulkan (Vulkan bench only)** – Mesa Vulkan driver or other Vulkan ICD. The bench creates a minimal Vulkan device with `VK_KHR_external_memory_fd` and `VK_EXT_external_memory_dma_buf`.
 
 If connection or GPU setup fails, the capture benchmarks are skipped and a short message is printed.

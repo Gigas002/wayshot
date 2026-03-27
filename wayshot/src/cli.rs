@@ -99,6 +99,10 @@ pub struct Cli {
     #[arg(short, long)]
     pub cursor: bool,
 
+    /// Frame copy backend: `shm` (default), `egl`, or `vulkan`. Overrides `[base] backend` in config when set.
+    #[arg(long, value_name = "BACKEND")]
+    pub backend: Option<String>,
+
     /// Do not freeze the screen when selecting a region (geometry) or a point (color picker).
     /// Selection happens on the live display; the capture is taken after selection.
     #[arg(long)]
