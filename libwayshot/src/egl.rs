@@ -1,6 +1,6 @@
 //! EGL/OpenGL-based capture path: DMA-BUF → EGLImage → GL texture.
 //!
-//! This module is available when the default `egl` feature is enabled. It provides:
+//! This module is available when the `egl` feature is enabled. It provides:
 //! - [`EGLImageGuard`] – owns an EGLImage created from a DMA-BUF capture
 //! - [`get_egl_display_wl`] / [`initialize_egl`] – EGL display from Wayland
 //! - [`create_egl_image_from_dmabuf`] – create an EGLImage from a GBM buffer

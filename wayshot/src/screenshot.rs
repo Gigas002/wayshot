@@ -34,6 +34,7 @@ pub enum CaptureMode {
 }
 
 /// Capture a screenshot according to `mode`.
+#[cfg_attr(not(feature = "selector"), allow(unused_variables))]
 pub fn capture(
     conn: &WayshotConnection,
     mode: &CaptureMode,

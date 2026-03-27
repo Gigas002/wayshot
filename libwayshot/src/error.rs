@@ -48,7 +48,7 @@ pub enum Error {
     #[error("dmabuf color format provided by compositor is invalid")]
     UnrecognizedColorCode(#[from] UnrecognizedFourcc),
     #[cfg(feature = "egl")]
-    #[error("dmabuf device has been destroyed")]
+    #[error("EGL error: {0}")]
     EGLError(#[from] egl::Error),
     #[cfg(feature = "egl")]
     #[error("No EGLImageTargetTexture2DOES function located, this extension may not be supported")]
