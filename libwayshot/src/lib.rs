@@ -532,10 +532,9 @@ impl WayshotConnection {
     /// It returns the captured frame as an `EGLImage`, wrapped in an `EGLImageGuard`
     /// for safe handling and cleanup.
     /// # Parameters
-    /// - `egl_instance`: Reference to an `EGL1_5` instance, which is used to create the `EGLImage`.
     /// - `egl_display`: The `EGLDisplay` on which the image should be created.
     /// - `cursor_overlay`: A boolean flag indicating whether the cursor should be included in the capture.
-    /// - `output`: Reference to the `WlOutput` from which the frame is to be captured.
+    /// - `target`: Reference to the `WayshotTarget` from which the frame is to be captured.
     /// - `capture_region`: Optional region specifying a sub-area of the output to capture. If `None`, the entire output is captured.
     ///
     /// # Returns
