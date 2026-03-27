@@ -190,7 +190,7 @@ impl AppSettings {
     }
 
     fn resolve_capture_backend(cli: &Cli, base: &config::Base) -> Result<CaptureBufferBackend> {
-        let raw = cli.backend.as_deref().or_else(|| base.backend.as_deref());
+        let raw = cli.backend.as_deref().or(base.backend.as_deref());
         let Some(s) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
             return Ok(CaptureBufferBackend::Shm);
         };
