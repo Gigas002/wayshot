@@ -29,8 +29,7 @@ use image::DynamicImage;
 use image::imageops::replace;
 use memmap2::MmapMut;
 use screencopy::{
-    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard,
-    FrameSurfaceGuard, create_shm_fd,
+    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
 };
 use tracing::debug;
 use wayland_client::{

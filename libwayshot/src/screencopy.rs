@@ -195,14 +195,14 @@ impl TryFrom<&FrameCopy> for DynamicImage {
     }
 }
 
-/// Map DRM fourcc (from DMA-BUF frame metadata) to `wl_shm::Format` for color conversion.
-pub(crate) fn drm_fourcc_to_wl_shm(fourcc: u32) -> Result<wl_shm::Format, Error> {
+/// Map DRM fourcc (from DMA-BUF frame metadata) to [`Format`] for color conversion.
+pub(crate) fn drm_fourcc_to_wl_shm(fourcc: u32) -> Result<Format, Error> {
     match fourcc {
-        0x34325241 => Ok(wl_shm::Format::Argb8888),
-        0x34325258 => Ok(wl_shm::Format::Xrgb8888),
-        0x34324241 => Ok(wl_shm::Format::Abgr8888),
-        0x34324258 => Ok(wl_shm::Format::Xbgr8888),
-        0x34324752 => Ok(wl_shm::Format::Bgr888),
+        0x34325241 => Ok(Format::Argb8888),
+        0x34325258 => Ok(Format::Xrgb8888),
+        0x34324241 => Ok(Format::Abgr8888),
+        0x34324258 => Ok(Format::Xbgr8888),
+        0x34324752 => Ok(Format::Bgr888),
         _ => Err(Error::NoSupportedBufferFormat),
     }
 }
