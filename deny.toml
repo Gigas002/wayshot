@@ -12,7 +12,6 @@ allow = [
     "Zlib",
     "NCSA",
     "Unicode-3.0",
-    # Weak copyleft - usually safe for libs
     "MPL-2.0",
 ]
 confidence-threshold = 0.8
