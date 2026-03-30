@@ -16,6 +16,9 @@ qoi = ["image/qoi"]
 webp = ["image/webp"]
 avif = ["image/avif"]
 egl = ["dep:gl", "dep:r-egl-wayland"]
+vulkan = ["dep:ash"]
+# Expose internal image/convert APIs for benchmarks only. Not part of stable API.
+bench = []
 
 [dependencies]
 tracing.workspace = true
@@ -38,3 +41,15 @@ drm = "0.15"
 
 gl = { workspace = true, optional = true }
 r-egl-wayland = { workspace = true, optional = true }
+ash = { workspace = true, optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "image_ops"
+harness = false
+
+[[bench]]
+name = "capture"
+harness = false

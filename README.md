@@ -27,9 +27,19 @@ NOTE: Read `man wayshot` for flag information.
 
 Screenshot and crop region:
 
+_Interactive selection_ (requires _selector_ feature):
+
 ```bash
 wayshot -g
 ```
+
+_Region from a geometry string_ (e.g. slurp, grim-style; works with or without _selector_):
+
+```bash
+wayshot -g "$(slurp)"
+```
+
+Format: _x_,_y_ *width*x*height* (e.g. _100,200 300x400_).
 
 Fullscreen:
 
@@ -62,6 +72,12 @@ Interactively choose a window to capture:
 wayshot --choose-toplevel
 ```
 
+Screenshot after a delay (e.g. 1 second):
+
+```bash
+wayshot --delay 1000
+```
+
 Pick a hex color code, using ImageMagick:
 
 ```bash
@@ -88,20 +104,32 @@ features can be selectively disabled:
 cargo build --no-default-features --features clipboard,logger,notifications
 ```
 
-| Feature         | What it adds                                                    | Extra dependency          |
-| --------------- | --------------------------------------------------------------- | ------------------------- |
-| `jpeg`          | JPEG encoding (`--encoding` / `.jpg`)                           | via `image`               |
-| `pnm`           | PNM/PPM encoding (`--encoding` / `.ppm`)                        | via `image`               |
-| `qoi`           | QOI encoding (`--encoding` / `.qoi`)                            | via `image`               |
-| `webp`          | WebP encoding (`--encoding` / `.webp`)                          | via `image`               |
-| `avif`          | AVIF encoding (`--encoding` / `.avif`)                          | rav1e (via `image`)       |
-| `clipboard`     | `--clipboard` flag, copy to Wayland clipboard                   | wl-clipboard-rs           |
-| `color_picker`  | `--color` flag, freeze screen and pick a pixel color            | —                         |
-| `jxl`           | JPEG-XL encoding (`--encoding` / `.jxl`)                        | libjxl / `jpegxl-rs`      |
-| `logger`        | `--log-level` flag, tracing output to stderr                    | tracing-subscriber        |
-| `notifications` | Desktop notifications after each capture                        | notify-rust               |
-| `selector`      | `--geometry` flag, interactive region selection                 | libwaysip                 |
-| `completions`   | `--completions <SHELL>` flag, generate shell completion scripts | clap_complete (+ nushell) |
+| Feature         | What it adds                                                                                                          | Extra dependency          |
+| --------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `jpeg`          | JPEG encoding (`--encoding` / `.jpg`)                                                                                 | via `image`               |
+| `pnm`           | PNM/PPM encoding (`--encoding` / `.ppm`)                                                                              | via `image`               |
+| `qoi`           | QOI encoding (`--encoding` / `.qoi`)                                                                                  | via `image`               |
+| `webp`          | WebP encoding (`--encoding` / `.webp`)                                                                                | via `image`               |
+| `avif`          | AVIF encoding (`--encoding` / `.avif`)                                                                                | rav1e (via `image`)       |
+| `clipboard`     | `--clipboard` flag, copy to Wayland clipboard                                                                         | wl-clipboard-rs           |
+| `color_picker`  | `--color` flag, freeze screen and pick a pixel color                                                                  | —                         |
+| `jxl`           | JPEG-XL encoding (`--encoding` / `.jxl`)                                                                              | libjxl / `jpegxl-rs`      |
+| `logger`        | `--log-level` flag, tracing output to stderr                                                                          | tracing-subscriber        |
+| `notifications` | Desktop notifications after each capture                                                                              | notify-rust               |
+| `selector`      | _-g_ without value: interactive region selection; _-g_ with value: geometry string (e.g. _$(slurp)_) always supported | libwaysip                 |
+| `completions`   | `--completions <SHELL>` flag, generate shell completion scripts                                                       | clap_complete (+ nushell) |
+
+# Benchmarking
+
+To compare **EGL** vs **Vulkan** capture performance (and run image-operation benchmarks), see **[docs/benchmarking.md](docs/benchmarking.md)**.
+
+Quick version: run under a Wayland session, then:
+
+```bash
+cargo bench -p libwayshot --features "egl,vulkan" -- capture
+```
+
+Open the generated Criterion HTML report to see timings for `capture_egl` and `capture_vulkan`.
 
 ## Clipboard without the built-in feature
 

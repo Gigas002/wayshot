@@ -34,6 +34,10 @@ pub struct WayshotScreenCast {
     bo: Option<BufferObject<()>>,
     #[cfg(feature = "egl")]
     egl_display: Option<crate::egl::EglDisplay>,
+    #[cfg(feature = "vulkan")]
+    pub(crate) vulkan_context: Option<crate::VulkanCaptureContext>,
+    #[cfg(feature = "vulkan")]
+    pub(crate) vulkan_image: Option<crate::VulkanImageGuard>,
 }
 
 impl Drop for WayshotScreenCast {
@@ -59,6 +63,13 @@ impl WayshotScreenCast {
     /// Get the buffer of the unit
     pub fn buffer(&self) -> &WlBuffer {
         &self.buffer
+    }
+
+    /// Get the current Vulkan image for this cast, if using [`create_screencast_with_vulkan`](WayshotConnection::create_screencast_with_vulkan).
+    /// Updated each time [`screencast`](WayshotConnection::screencast) is called successfully.
+    #[cfg(feature = "vulkan")]
+    pub fn vulkan_image(&self) -> Option<&crate::VulkanImageGuard> {
+        self.vulkan_image.as_ref()
     }
 }
 
@@ -99,6 +110,22 @@ impl WayshotConnection {
         let mut cast =
             self.create_screencast_with_dmabuf(target, cursor_overlay, capture_region)?;
         cast.egl_display = Some(egl_display);
+        Ok(cast)
+    }
+
+    /// Vulkan analogue of [`create_screencast_with_egl`](Self::create_screencast_with_egl).
+    /// Each call to [`screencast`](Self::screencast) will update the Vulkan image; retrieve it via [`WayshotScreenCast::vulkan_image`].
+    #[cfg(feature = "vulkan")]
+    pub fn create_screencast_with_vulkan(
+        &self,
+        target: WayshotTarget,
+        cursor_overlay: bool,
+        capture_region: Option<EmbeddedRegion>,
+        vulkan_context: crate::VulkanCaptureContext,
+    ) -> Result<WayshotScreenCast> {
+        let mut cast =
+            self.create_screencast_with_dmabuf(target, cursor_overlay, capture_region)?;
+        cast.vulkan_context = Some(vulkan_context);
         Ok(cast)
     }
     /// This will save a screencast status for you
@@ -181,6 +208,10 @@ impl WayshotConnection {
             bo: Some(bo),
             #[cfg(feature = "egl")]
             egl_display: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_context: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_image: None,
         })
     }
     /// This will save a screencast status for you
@@ -242,6 +273,10 @@ impl WayshotConnection {
             bo: None,
             #[cfg(feature = "egl")]
             egl_display: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_context: None,
+            #[cfg(feature = "vulkan")]
+            vulkan_image: None,
         })
     }
 
@@ -319,6 +354,16 @@ impl WayshotConnection {
             }
             let frame_format = state.dmabuf_formats[0];
             crate::egl::create_egl_image_and_bind_to_gl_texture(*egl_display, bo, &frame_format)?;
+        }
+
+        #[cfg(feature = "vulkan")]
+        if let (Some(context), Some(bo)) = (cast.vulkan_context.as_ref(), cast.dmabuf_bo()) {
+            if state.dmabuf_formats.is_empty() {
+                return Err(Error::NoDMAStateError);
+            }
+            let frame_format = state.dmabuf_formats[0];
+            let guard = crate::vulkan::import_dmabuf_to_vk_image(context, bo, frame_format.size)?;
+            cast.vulkan_image = Some(guard);
         }
 
         Ok(())

@@ -71,9 +71,12 @@ pub struct Cli {
     pub color: bool,
 
     // ─── Capture target (what to capture) ────────────────────────────────────
-    /// Interactively select a screen region to capture.
-    #[arg(short, long)]
-    pub geometry: bool,
+    /// Interactively select a screen region, or use a geometry string from a tool like slurp.
+    /// Examples:
+    ///   wayshot -g                    # interactive selection (requires selector feature)
+    ///   wayshot -g "$(slurp)"         # region from slurp (format: x,y widthxheight)
+    #[arg(short, long, value_name = "GEOMETRY", num_args = 0..=1, verbatim_doc_comment)]
+    pub geometry: Option<Option<String>>,
 
     /// Capture a specific output/display by name.
     #[arg(short, long, conflicts_with = "geometry")]

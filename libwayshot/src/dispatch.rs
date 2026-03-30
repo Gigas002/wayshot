@@ -546,6 +546,7 @@ impl wayland_client::Dispatch<ZwlrLayerSurfaceV1, WlOutput> for LayerShellState 
         }
     }
 }
+#[derive(Debug)]
 pub(crate) struct Card(std::fs::File);
 
 /// Implementing [`AsFd`] is a prerequisite to implementing the traits found

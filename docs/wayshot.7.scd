@@ -10,9 +10,13 @@ Wayshot - Screenshot tool for compositors implementing zwlr_screencopy_v1 such a
 
 # REGION SELECTION
 
-Interactively select a screen region using the waysip overlay (requires *selector* feature):
+*Interactive selection* (requires *selector* feature):
 
 	wayshot -g
+
+*Region from a geometry string* (e.g. slurp; works with or without *selector*):
+
+	wayshot -g "$(slurp)"
 
 # CAPTURE FULLSCREEN
 

@@ -23,3 +23,4 @@ image = { version = "0.25", default-features = false }
 wayland-client = "0.31"
 wayland-protocols = "0.32"
 gl = "0.14"
+ash = "0.38"

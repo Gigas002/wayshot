@@ -13,6 +13,11 @@ pub mod output;
 pub mod region;
 pub mod screencast;
 mod screencopy;
+#[cfg(feature = "vulkan")]
+mod vulkan;
+
+#[cfg(test)]
+mod tests;
 
 use std::{
     collections::HashSet, fs::File, os::fd::AsFd, path::Path, sync::atomic::Ordering, thread,
@@ -20,6 +25,7 @@ use std::{
 
 use dispatch::{DMABUFState, LayerShellState};
 use image::DynamicImage;
+use image::imageops::replace;
 use memmap2::MmapMut;
 use screencopy::{
     DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
@@ -77,10 +83,17 @@ pub use crate::{
     region::{EmbeddedRegion, LogicalRegion, RegionCapturer, Size, TopLevel},
 };
 
-pub use crate::error::{Error, Result};
-
 #[cfg(feature = "egl")]
 pub use crate::egl::EGLImageGuard;
+#[cfg(feature = "vulkan")]
+pub use crate::vulkan::{VulkanCaptureContext, VulkanImageGuard};
+
+pub use crate::error::{Error, Result};
+
+#[cfg(feature = "bench")]
+pub use crate::convert::{Convert, create_converter};
+#[cfg(feature = "bench")]
+pub use crate::image_util::rotate_image_buffer;
 
 pub mod reexport {
     use wayland_client::protocol::wl_output;
@@ -534,6 +547,34 @@ impl WayshotConnection {
         let (frame_format, _guard, bo) =
             self.capture_target_frame_dmabuf(target, cursor_overlay, capture_region)?;
         crate::egl::create_egl_image_from_dmabuf(egl_display, &bo, &frame_format)
+    }
+
+    /// Obtain a screencapture as a Vulkan image (VkImage) for use in Vulkan pipelines.
+    ///
+    /// This is the Vulkan analogue of [`capture_target_frame_eglimage`](Self::capture_target_frame_eglimage).
+    /// Uses the DMA-BUF path and imports the buffer into a VkImage via the given context.
+    /// The device in `context` must support `VK_EXT_external_memory_dma_buf` and `VK_KHR_external_memory_fd`.
+    ///
+    /// # Parameters
+    /// - `context`: Vulkan context (device, queue, memory type index for DMA-BUF import).
+    /// - `target`: Reference to the [WayshotTarget] from which the frame is to be captured.
+    /// - `cursor_overlay`: Whether to include the cursor in the capture.
+    /// - `capture_region`: Optional sub-area to capture; `None` for full target.
+    ///
+    /// # Returns
+    /// A [`VulkanImageGuard`] holding the VkImage and image view. Use [`VulkanImageGuard::image`]
+    /// and [`VulkanImageGuard::image_view`] in your Vulkan descriptor sets and pipelines.
+    #[cfg(feature = "vulkan")]
+    pub fn capture_target_frame_vk_image(
+        &self,
+        context: &crate::VulkanCaptureContext,
+        target: &WayshotTarget,
+        cursor_overlay: bool,
+        capture_region: Option<EmbeddedRegion>,
+    ) -> Result<crate::VulkanImageGuard> {
+        let (frame_format, _dma_guard, bo) =
+            self.capture_target_frame_dmabuf(target, cursor_overlay, capture_region)?;
+        crate::vulkan::import_dmabuf_to_vk_image(context, &bo, frame_format.size)
     }
 
     /// Obtain a screencapture in the form of a WlBuffer backed by a GBM Bufferobject on the GPU.
@@ -1373,33 +1414,13 @@ impl WayshotConnection {
                         let logical_region = frame_copy.logical_region;
                         let transform = frame_copy.transform;
                         let logical_size = logical_region.inner.size;
-                        // Perform in-place color conversion directly on the mmap buffer
-                        // to avoid cloning. Calling `get_image()` here would force an
-                        // immediate clone.
-                        let frame_color_type = frame_copy.convert_color_inplace()?;
-
-                        let image = match frame_color_type {
-                            image::ColorType::Rgba8 => {
-                                let image = frame_copy.into_mmap_rgba_image_buffer()?;
-                                image_util::prepare_mmap_rgba_image(
-                                    image,
-                                    transform,
-                                    logical_size,
-                                    max_scale,
-                                )
-                            }
-                            image::ColorType::Rgb8 => {
-                                let image: DynamicImage = (&frame_copy).try_into()?;
-                                image_util::PreparedImage::Dynamic(image_util::rotate_image_buffer(
-                                    image,
-                                    transform,
-                                    logical_size,
-                                    max_scale,
-                                ))
-                            }
-                            _ => return Err(Error::InvalidColor),
-                        };
-
+                        let image = frame_copy.get_image()?;
+                        let image = image_util::rotate_image_buffer(
+                            image,
+                            transform,
+                            logical_size,
+                            max_scale,
+                        );
                         Ok((image, logical_region))
                     })
                 })
@@ -1440,7 +1461,7 @@ impl WayshotConnection {
                             )
                             .in_scope(|| {
                                 tracing::debug!("Replacing parts of the final image");
-                                image.replace_into(&mut composite_image, x, y);
+                                replace(&mut composite_image, &image, x, y);
                             });
 
                             Ok(composite_image)
