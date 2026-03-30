@@ -121,6 +121,7 @@ pub struct WayshotConnection {
     dmabuf_state: Option<DMABUFState>,
     toplevel_capture_support: bool,
     image_copy_support: bool,
+    find_dmabuf: bool,
 }
 
 pub enum WayshotFrame {
@@ -197,6 +198,7 @@ impl WayshotConnection {
             dmabuf_state: None,
             toplevel_capture_support,
             image_copy_support,
+            find_dmabuf: false,
         };
 
         initial_state.refresh_outputs()?;
@@ -207,6 +209,11 @@ impl WayshotConnection {
 
     fn has_gbm(&self) -> bool {
         self.dmabuf_state.is_some()
+    }
+
+    // NOTE: this function says if we need to try receive the gdm information from ext-image-copy
+    fn need_try_find_gbm(&self) -> bool {
+        !self.has_gbm() && self.find_dmabuf
     }
     ///Create a WayshotConnection struct having DMA-BUF support
     /// Using this connection is required to make use of the dmabuf functions
@@ -236,6 +243,7 @@ impl WayshotConnection {
             }),
             toplevel_capture_support,
             image_copy_support,
+            find_dmabuf: false,
         };
 
         initial_state.refresh_outputs()?;
@@ -318,7 +326,7 @@ impl WayshotConnection {
     }
 
     pub fn refresh_toplevels(&mut self) -> Result<()> {
-        let mut state = CaptureFrameState::new(!self.has_gbm());
+        let mut state = CaptureFrameState::new(self.need_try_find_gbm());
 
         let mut event_queue = self.conn.new_event_queue::<CaptureFrameState>();
         let qh = event_queue.handle();
@@ -803,7 +811,7 @@ impl WayshotConnection {
         EventQueue<CaptureFrameState>,
         WayshotFrame,
     )> {
-        let state = CaptureFrameState::new(!self.has_gbm());
+        let state = CaptureFrameState::new(self.need_try_find_gbm());
         let event_queue = self.conn.new_event_queue::<CaptureFrameState>();
         let qh = event_queue.handle();
         match self
@@ -909,8 +917,8 @@ impl WayshotConnection {
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
             // Basically reads, if frame state is not None then...
-            if let Some(state) = state.state {
-                match state {
+            if let Some(frame_state) = state.state {
+                match frame_state {
                     FrameState::Failed => {
                         tracing::error!("Frame copy failed");
                         return Err(Error::FramecopyFailed);
@@ -920,6 +928,7 @@ impl WayshotConnection {
                         return Err(Error::FramecopyFailedWithReason(reason));
                     }
                     FrameState::Finished => {
+                        event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
                         return Ok(DMAFrameGuard {
                             buffer: dmabuf_wlbuf,
@@ -982,8 +991,8 @@ impl WayshotConnection {
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
             // Basically reads, if frame state is not None then...
-            if let Some(state) = state.state {
-                match state {
+            if let Some(frame_state) = state.state {
+                match frame_state {
                     FrameState::Failed => {
                         tracing::error!("Frame copy failed");
                         return Err(Error::FramecopyFailed);
@@ -993,8 +1002,8 @@ impl WayshotConnection {
                         return Err(Error::FramecopyFailedWithReason(reason));
                     }
                     FrameState::Finished => {
+                        event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
-
                         return Ok(DMAFrameGuard {
                             buffer: dmabuf_wlbuf,
                         });
@@ -1061,13 +1070,14 @@ impl WayshotConnection {
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
             // Basically reads, if frame state is not None then...
-            if let Some(state) = state.state {
-                match state {
+            if let Some(frame_state) = state.state {
+                match frame_state {
                     FrameState::Failed | FrameState::FailedWithReason(_) => {
                         tracing::error!("Frame copy failed");
                         return Err(Error::FramecopyFailed);
                     }
                     FrameState::Finished => {
+                        event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
                         return Ok(FrameGuard {
                             buffer,
@@ -1120,8 +1130,8 @@ impl WayshotConnection {
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
             // Basically reads, if frame state is not None then...
-            if let Some(state) = state.state {
-                match state {
+            if let Some(frame_state) = state.state {
+                match frame_state {
                     FrameState::Failed => {
                         tracing::error!("Frame copy failed");
                         return Err(Error::FramecopyFailed);
@@ -1131,6 +1141,7 @@ impl WayshotConnection {
                         return Err(Error::FramecopyFailedWithReason(reason));
                     }
                     FrameState::Finished => {
+                        event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
                         return Ok(FrameGuard {
                             buffer,
@@ -1531,7 +1542,7 @@ impl WayshotConnection {
         WayshotFrame,
     )> {
         // Create state and event queue similar to other ext-image flows
-        let mut state = CaptureFrameState::new(!self.has_gbm());
+        let mut state = CaptureFrameState::new(self.need_try_find_gbm());
         let mut event_queue = self.conn.new_event_queue::<CaptureFrameState>();
         let qh = event_queue.handle();
 
