@@ -1,7 +1,10 @@
 #[cfg(feature = "selector")]
 use crate::utils::get_region_area;
+#[cfg(feature = "cli")]
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
-use eyre::{Result, bail};
+use eyre::Result;
+#[cfg(feature = "cli")]
+use eyre::bail;
 use libwayshot::WayshotConnection;
 
 /// Describes what was captured, used to build the notification body.
@@ -20,14 +23,18 @@ pub enum CaptureMode {
     #[cfg(feature = "selector")]
     Geometry,
     /// A fixed region parsed from a slurp/waysip geometry string.
+    #[cfg(feature = "cli")]
     GeometryRegion(libwayshot::LogicalRegion),
     /// A specific toplevel window by its id+title string.
+    #[cfg(feature = "cli")]
     Toplevel(String),
     /// Interactive fuzzy-select from active toplevel windows.
+    #[cfg(feature = "cli")]
     ChooseToplevel,
     /// A named output/display.
     Output(String),
     /// Interactive fuzzy-select from available outputs.
+    #[cfg(feature = "cli")]
     ChooseOutput,
     /// Every connected output at once.
     All,
@@ -44,13 +51,17 @@ pub fn capture(
     match mode {
         #[cfg(feature = "selector")]
         CaptureMode::Geometry => capture_geometry(conn, cursor, freeze),
+        #[cfg(feature = "cli")]
         CaptureMode::GeometryRegion(region) => {
             let image = conn.screenshot(*region, cursor)?;
             Ok((image, ShotResult::Area))
         }
+        #[cfg(feature = "cli")]
         CaptureMode::Toplevel(name) => capture_toplevel_by_name(conn, name, cursor),
+        #[cfg(feature = "cli")]
         CaptureMode::ChooseToplevel => capture_toplevel_interactive(conn, cursor),
         CaptureMode::Output(name) => capture_output_by_name(conn, name, cursor),
+        #[cfg(feature = "cli")]
         CaptureMode::ChooseOutput => capture_output_interactive(conn, cursor),
         CaptureMode::All => Ok((conn.screenshot_all(cursor)?, ShotResult::All)),
     }
@@ -75,6 +86,7 @@ fn capture_geometry(
     Ok((image, ShotResult::Area))
 }
 
+#[cfg(feature = "cli")]
 fn capture_toplevel_by_name(
     conn: &WayshotConnection,
     name: &str,
@@ -94,6 +106,7 @@ fn capture_toplevel_by_name(
     ))
 }
 
+#[cfg(feature = "cli")]
 fn capture_toplevel_interactive(
     conn: &WayshotConnection,
     cursor: bool,
@@ -131,6 +144,7 @@ fn capture_output_by_name(
     ))
 }
 
+#[cfg(feature = "cli")]
 fn capture_output_interactive(
     conn: &WayshotConnection,
     cursor: bool,
@@ -146,6 +160,7 @@ fn capture_output_interactive(
     ))
 }
 
+#[cfg(feature = "cli")]
 fn fuzzy_select<T: ToString + std::fmt::Display>(items: &[T]) -> Option<usize> {
     FuzzySelect::with_theme(&ColorfulTheme::default())
         .with_prompt("Choose Screen")

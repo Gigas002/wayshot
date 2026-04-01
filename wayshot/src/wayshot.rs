@@ -1,10 +1,13 @@
 use std::io::{self, BufWriter, Write};
 use std::time::Duration;
 
-use clap::Parser;
 use eyre::Result;
 use libwayshot::WayshotConnection;
 
+#[cfg(feature = "cli")]
+use clap::Parser;
+
+#[cfg(feature = "cli")]
 mod cli;
 #[cfg(feature = "clipboard")]
 mod clipboard;
@@ -23,6 +26,7 @@ use config::Config;
 use settings::{AppSettings, Command};
 
 fn main() -> Result<()> {
+    #[cfg(feature = "cli")]
     let cli = cli::Cli::parse();
 
     #[cfg(feature = "completions")]
@@ -31,19 +35,36 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let config_path = cli.config.clone().unwrap_or(Config::get_default_path());
-    let config = Config::load(&config_path).unwrap_or_default();
+    #[cfg(feature = "config")]
+    let config = {
+        #[cfg(feature = "cli")]
+        let config_path = cli.config.clone().unwrap_or(Config::get_default_path());
+        #[cfg(not(feature = "cli"))]
+        let config_path = Config::get_default_path();
+        Config::load(&config_path).unwrap_or_default()
+    };
+    #[cfg(not(feature = "config"))]
+    let config = Config::default();
 
     #[cfg(feature = "logger")]
-    logger::setup(&cli, &config);
+    logger::setup(
+        #[cfg(feature = "cli")]
+        &cli,
+        &config,
+    );
 
-    let settings = AppSettings::resolve(&cli, &config);
+    let settings = AppSettings::resolve(
+        #[cfg(feature = "cli")]
+        &cli,
+        &config,
+    );
 
     let connection = WayshotConnection::new()?;
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());
 
     match settings.command {
+        #[cfg(feature = "cli")]
         Command::ListOutputs => {
             for output in connection.get_all_outputs() {
                 writeln!(writer, "{}", output.name)?;
@@ -51,10 +72,12 @@ fn main() -> Result<()> {
             writer.flush()?;
             Ok(())
         }
+        #[cfg(feature = "cli")]
         Command::ListOutputsInfo => {
             connection.print_displays_info();
             Ok(())
         }
+        #[cfg(feature = "cli")]
         Command::ListToplevels => {
             for tl in connection.get_all_toplevels().iter().filter(|t| t.active) {
                 writeln!(writer, "{}", tl.id_and_title())?;

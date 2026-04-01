@@ -1,4 +1,3 @@
-use clap::ValueEnum;
 use eyre::{ContextCompat, Error, bail};
 use image::{
     DynamicImage,
@@ -64,6 +63,7 @@ pub fn print_completions(shell: crate::cli::Shell) {
 // ─── Slurp-style geometry parser ─────────────────────────────────────────────
 
 /// Parse a geometry string in slurp/grim format: "x,y widthxheight" (e.g. "100,200 300x400").
+#[cfg(feature = "cli")]
 pub fn parse_slurp_geometry(s: &str) -> Result<libwayshot::LogicalRegion, String> {
     let s = s.trim();
     if s.is_empty() {
@@ -168,7 +168,8 @@ pub fn get_region_point(conn: &libwayshot::WayshotConnection) -> Result<LogicalR
 // ─── Encoding format ──────────────────────────────────────────────────────────
 
 /// Supported image encoding formats.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum, Serialize, Deserialize, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[serde(rename_all = "snake_case")]
 pub enum EncodingFormat {
     /// JPG/JPEG encoder.

@@ -2,7 +2,9 @@ use crate::utils::EncodingFormat;
 #[cfg(feature = "jxl")]
 use jpegxl_rs::encode::EncoderSpeed;
 use serde::{Deserialize, Serialize};
-use std::{env, io::Read, path::PathBuf};
+#[cfg(feature = "config")]
+use std::io::Read;
+use std::{env, path::PathBuf};
 #[cfg(feature = "logger")]
 use tracing::Level;
 
@@ -24,6 +26,7 @@ impl Default for Config {
 }
 
 impl Config {
+    #[cfg(feature = "config")]
     pub fn load(path: &PathBuf) -> Option<Config> {
         let mut config_file = std::fs::File::open(path).ok()?;
         let mut config_str = String::new();
@@ -32,6 +35,7 @@ impl Config {
         toml::from_str(&config_str).ok()?
     }
 
+    #[cfg(feature = "config")]
     pub fn get_default_path() -> PathBuf {
         dirs::config_local_dir()
             .map(|path| path.join("wayshot").join("config.toml"))

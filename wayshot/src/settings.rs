@@ -1,5 +1,6 @@
 use std::{env, path::PathBuf};
 
+#[cfg(feature = "cli")]
 use crate::cli::Cli;
 use crate::config::{self, Config};
 use crate::screenshot::CaptureMode;
@@ -10,10 +11,13 @@ use crate::utils::{self, EncodingFormat};
 /// The top-level operation to perform, fully resolved from CLI + config.
 pub(crate) enum Command {
     /// Print the names of all connected outputs and exit.
+    #[cfg(feature = "cli")]
     ListOutputs,
     /// Print detailed info about all connected outputs and exit.
+    #[cfg(feature = "cli")]
     ListOutputsInfo,
     /// Print the id+title strings of all active toplevels and exit.
+    #[cfg(feature = "cli")]
     ListToplevels,
     /// Pick a pixel color interactively and exit.
     #[cfg(feature = "color_picker")]
@@ -54,22 +58,28 @@ pub(crate) struct AppSettings {
 }
 
 impl AppSettings {
-    pub(crate) fn resolve(cli: &Cli, config: &Config) -> Self {
+    pub(crate) fn resolve(#[cfg(feature = "cli")] cli: &Cli, config: &Config) -> Self {
         let base = config.base.clone().unwrap_or_default();
         let file_config = config.file.clone().unwrap_or_default();
         let encoding_config = config.encoding.clone().unwrap_or_default();
 
         // ── Cursor ────────────────────────────────────────────────────────────
         // Either the --cursor flag or config `cursor = true` enables cursor capture.
-        let cursor = cli.cursor || base.cursor.unwrap_or_default();
+        let cursor = base.cursor.unwrap_or_default();
+        #[cfg(feature = "cli")]
+        let cursor = cli.cursor || cursor;
 
         // ── Freeze ─────────────────────────────────────────────────────────────
         // Freeze screen before selection; false when CLI --no-freeze or config freeze = false.
-        let freeze = !cli.no_freeze && base.freeze.unwrap_or(true);
+        let freeze = base.freeze.unwrap_or(true);
+        #[cfg(feature = "cli")]
+        let freeze = !cli.no_freeze && freeze;
 
         // ── Delay ─────────────────────────────────────────────────────────────
         // Wait N ms before capture; CLI overrides config; None = no delay.
-        let delay = cli.delay.or(base.delay);
+        let delay = base.delay;
+        #[cfg(feature = "cli")]
+        let delay = cli.delay.or(delay);
 
         // ── Encoding ──────────────────────────────────────────────────────────
         // Resolution order:
@@ -77,25 +87,43 @@ impl AppSettings {
         //   2. format inferred from the FILE extension
         //   3. config `[file] encoding`
         //   4. built-in default (PNG)
+        #[cfg(feature = "cli")]
         let input_encoding: Option<EncodingFormat> =
             cli.file.as_ref().and_then(|p| p.try_into().ok());
-        let encoding = cli
-            .encoding
-            .or(input_encoding)
-            .unwrap_or_else(|| file_config.encoding.unwrap_or_default());
-
-        if let Some(ie) = input_encoding
-            && ie != encoding
-        {
-            tracing::warn!(
-                "Requested encoding '{encoding}' does not match \
-                 the file extension '{ie}'. Using the requested encoding."
-            );
-        }
+        let encoding = {
+            #[cfg(feature = "cli")]
+            {
+                let enc = cli
+                    .encoding
+                    .or(input_encoding)
+                    .unwrap_or_else(|| file_config.encoding.unwrap_or_default());
+                if let Some(ie) = input_encoding
+                    && ie != enc
+                {
+                    tracing::warn!(
+                        "Requested encoding '{enc}' does not match \
+                         the file extension '{ie}'. Using the requested encoding."
+                    );
+                }
+                enc
+            }
+            #[cfg(not(feature = "cli"))]
+            file_config.encoding.unwrap_or_default()
+        };
 
         // ── File name format ──────────────────────────────────────────────────
         // CLI --file-name-format overrides config; falls back to a timestamp pattern.
-        let file_name_format = cli.file_name_format.clone().unwrap_or_else(|| {
+        let file_name_format = {
+            #[cfg(feature = "cli")]
+            {
+                cli.file_name_format.clone()
+            }
+            #[cfg(not(feature = "cli"))]
+            {
+                None::<String>
+            }
+        }
+        .unwrap_or_else(|| {
             file_config
                 .name_format
                 .clone()
@@ -106,8 +134,18 @@ impl AppSettings {
         // stdout_print starts from config `stdout = true`.
         // resolve_output_file may also flip it to true when FILE is `-`.
         let mut stdout_print = base.stdout.unwrap_or_default();
+        let cli_file = {
+            #[cfg(feature = "cli")]
+            {
+                cli.file.clone()
+            }
+            #[cfg(not(feature = "cli"))]
+            {
+                None
+            }
+        };
         let file = Self::resolve_output_file(
-            cli.file.clone(),
+            cli_file,
             &base,
             &file_config,
             &file_name_format,
@@ -117,6 +155,7 @@ impl AppSettings {
 
         // ── Command ───────────────────────────────────────────────────────────
         // Query commands are checked first; screenshot mode is the default.
+        #[cfg(feature = "cli")]
         let command = 'cmd: {
             if cli.list_outputs {
                 break 'cmd Command::ListOutputs;
@@ -134,6 +173,8 @@ impl AppSettings {
             let output = cli.output.clone().or_else(|| base.output.clone());
             Command::Screenshot(Self::resolve_capture_mode(cli, output))
         };
+        #[cfg(not(feature = "cli"))]
+        let command = Command::Screenshot(Self::resolve_capture_mode(base.output.clone()));
 
         AppSettings {
             command,
@@ -146,12 +187,31 @@ impl AppSettings {
             jxl: encoding_config.jxl.unwrap_or_default(),
             png: encoding_config.png.unwrap_or_default(),
             #[cfg(feature = "clipboard")]
-            clipboard: cli.clipboard || base.clipboard.unwrap_or_default(),
+            clipboard: {
+                #[cfg(feature = "cli")]
+                {
+                    cli.clipboard || base.clipboard.unwrap_or_default()
+                }
+                #[cfg(not(feature = "cli"))]
+                {
+                    base.clipboard.unwrap_or_default()
+                }
+            },
             #[cfg(feature = "notifications")]
-            notifications: !cli.silent && base.notifications.unwrap_or(true),
+            notifications: {
+                #[cfg(feature = "cli")]
+                {
+                    !cli.silent && base.notifications.unwrap_or(true)
+                }
+                #[cfg(not(feature = "cli"))]
+                {
+                    base.notifications.unwrap_or(true)
+                }
+            },
         }
     }
 
+    #[cfg(feature = "cli")]
     fn resolve_capture_mode(cli: &Cli, output: Option<String>) -> CaptureMode {
         if let Some(geometry) = &cli.geometry {
             match geometry {
@@ -184,6 +244,15 @@ impl AppSettings {
             CaptureMode::Output(name)
         } else if cli.choose_output {
             CaptureMode::ChooseOutput
+        } else {
+            CaptureMode::All
+        }
+    }
+
+    #[cfg(not(feature = "cli"))]
+    fn resolve_capture_mode(output: Option<String>) -> CaptureMode {
+        if let Some(name) = output {
+            CaptureMode::Output(name)
         } else {
             CaptureMode::All
         }

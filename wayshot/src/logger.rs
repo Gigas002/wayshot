@@ -2,6 +2,7 @@
 
 use std::io;
 
+#[cfg(feature = "cli")]
 use crate::cli::Cli;
 use crate::config::Config;
 
@@ -9,8 +10,18 @@ use crate::config::Config;
 ///
 /// The log level is taken from `--log-level` if supplied, then from the config
 /// file, falling back to `INFO`.
-pub fn setup(cli: &Cli, config: &Config) {
-    let level = cli.log_level.unwrap_or_else(|| {
+pub fn setup(#[cfg(feature = "cli")] cli: &Cli, config: &Config) {
+    let level = {
+        #[cfg(feature = "cli")]
+        {
+            cli.log_level
+        }
+        #[cfg(not(feature = "cli"))]
+        {
+            None
+        }
+    }
+    .unwrap_or_else(|| {
         config
             .base
             .as_ref()
