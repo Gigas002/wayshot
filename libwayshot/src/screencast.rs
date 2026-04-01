@@ -1,22 +1,26 @@
 use std::os::fd::AsFd;
 
+#[cfg(feature = "dmabuf")]
 use gbm::{BufferObject, BufferObjectFlags};
-use wayland_client::{
-    Proxy,
-    globals::registry_queue_init,
-    protocol::{
-        wl_buffer::{self, WlBuffer},
-        wl_shm::{self, WlShm},
-        wl_shm_pool::WlShmPool,
-    },
+use wayland_client::protocol::{
+    wl_buffer::{self, WlBuffer},
+    wl_shm::{self, WlShm},
+    wl_shm_pool::WlShmPool,
 };
+#[cfg(feature = "dmabuf")]
+use wayland_client::{Proxy, globals::registry_queue_init};
+#[cfg(feature = "dmabuf")]
 use wayland_protocols::wp::linux_dmabuf::zv1::client::{
     zwp_linux_buffer_params_v1, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
 };
 
+#[cfg(feature = "dmabuf")]
+use crate::dispatch::DMABUFState;
+#[cfg(feature = "dmabuf")]
+use crate::dispatch::WayshotState;
 use crate::{
     EmbeddedRegion, Error, Result, Size, WayshotConnection, WayshotFrame, WayshotTarget,
-    dispatch::{DMABUFState, FrameState, WayshotState},
+    dispatch::FrameState,
 };
 
 /// It is a unit to do screencast. It storages used information for screencast
@@ -31,6 +35,7 @@ pub struct WayshotScreenCast {
     capture_region: Option<EmbeddedRegion>,
     shm_pool: Option<WlShmPool>,
     shm_format: Option<wl_shm::Format>,
+    #[cfg(feature = "dmabuf")]
     bo: Option<BufferObject<()>>,
     #[cfg(feature = "egl")]
     egl_display: Option<crate::egl::EglDisplay>,
@@ -52,6 +57,7 @@ impl WayshotScreenCast {
     }
 
     /// Get the buffer object
+    #[cfg(feature = "dmabuf")]
     pub fn dmabuf_bo(&self) -> Option<&BufferObject<()>> {
         self.bo.as_ref()
     }
@@ -65,6 +71,7 @@ impl WayshotScreenCast {
 impl WayshotConnection {
     /// This will run once to get the device provided by ext-image-copy. If you did not init the
     /// dmabuf at the first, you can try to use this way to init one
+    #[cfg(feature = "dmabuf")]
     pub fn try_init_dmabuf(&mut self, target: WayshotTarget) -> Result<()> {
         self.find_dmabuf = true;
         if self.dmabuf_state.is_some() {
@@ -88,7 +95,7 @@ impl WayshotConnection {
     /// We suggest you to use this api to do screencast
     /// Same with create_screencast_with_shm, but now it is with dmabuf
     /// And bind the a [crate::egl::EglDisplay], to support the egl
-    #[cfg(feature = "egl")]
+    #[cfg(all(feature = "egl", feature = "dmabuf"))]
     pub fn create_screencast_with_egl(
         &self,
         target: WayshotTarget,
@@ -104,6 +111,7 @@ impl WayshotConnection {
     /// This will save a screencast status for you
     /// We suggest you to use this api to do screencast
     /// Same with create_screencast_with_shm, but now it is with dmabuf
+    #[cfg(feature = "dmabuf")]
     pub fn create_screencast_with_dmabuf(
         &self,
         target: WayshotTarget,
@@ -178,6 +186,7 @@ impl WayshotConnection {
             capture_region,
             shm_pool: None,
             shm_format: None,
+            #[cfg(feature = "dmabuf")]
             bo: Some(bo),
             #[cfg(feature = "egl")]
             egl_display: None,
@@ -239,6 +248,7 @@ impl WayshotConnection {
             capture_region,
             shm_pool: Some(shm_pool),
             shm_format: Some(shm_format),
+            #[cfg(feature = "dmabuf")]
             bo: None,
             #[cfg(feature = "egl")]
             egl_display: None,
@@ -286,6 +296,7 @@ impl WayshotConnection {
                 frame.damage_buffer(0, 0, cast.origin_size.width, cast.origin_size.height);
                 frame.capture();
             }
+            #[cfg(feature = "wlr")]
             WayshotFrame::WlrScreenshot(frame) => {
                 frame.copy(&cast.buffer);
             }
@@ -312,7 +323,7 @@ impl WayshotConnection {
             event_queue.blocking_dispatch(&mut state)?;
         }
 
-        #[cfg(feature = "egl")]
+        #[cfg(all(feature = "egl", feature = "dmabuf"))]
         if let (Some(egl_display), Some(bo)) = (cast.egl_display.as_ref(), cast.dmabuf_bo()) {
             if state.dmabuf_formats.is_empty() {
                 return Err(Error::NoDMAStateError);

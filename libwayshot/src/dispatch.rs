@@ -1,24 +1,37 @@
+#[cfg(feature = "dmabuf")]
 use drm::node::DrmNode;
+#[cfg(feature = "wlr")]
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(feature = "dmabuf")]
 use std::{
-    collections::HashSet,
     os::fd::{AsFd, BorrowedFd},
     path::Path,
-    sync::atomic::{AtomicBool, Ordering},
 };
 use wayland_client::{
-    Connection, Dispatch, QueueHandle,
-    WEnum::{self, Value},
-    delegate_noop,
+    Connection, Dispatch, QueueHandle, WEnum, delegate_noop,
     globals::GlobalListContents,
     protocol::{
         wl_buffer::WlBuffer,
-        wl_compositor::WlCompositor,
         wl_output::{self, WlOutput},
         wl_registry::{self, WlRegistry},
         wl_shm::WlShm,
         wl_shm_pool::WlShmPool,
-        wl_surface::WlSurface,
     },
+};
+#[cfg(feature = "wlr")]
+use wayland_client::{
+    WEnum::Value,
+    protocol::{wl_compositor::WlCompositor, wl_surface::WlSurface},
+};
+#[cfg(feature = "dmabuf")]
+use wayland_protocols::wp::linux_dmabuf::zv1::client::{
+    zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
+    zwp_linux_dmabuf_v1::{self, ZwpLinuxDmabufV1},
+};
+#[cfg(feature = "wlr")]
+use wayland_protocols::wp::viewporter::client::{
+    wp_viewport::WpViewport, wp_viewporter::WpViewporter,
 };
 use wayland_protocols::{
     ext::{
@@ -37,18 +50,12 @@ use wayland_protocols::{
             ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
         },
     },
-    wp::{
-        linux_dmabuf::zv1::client::{
-            zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
-            zwp_linux_dmabuf_v1::{self, ZwpLinuxDmabufV1},
-        },
-        viewporter::client::{wp_viewport::WpViewport, wp_viewporter::WpViewporter},
-    },
     xdg::xdg_output::zv1::client::{
         zxdg_output_manager_v1::ZxdgOutputManagerV1,
         zxdg_output_v1::{self, ZxdgOutputV1},
     },
 };
+#[cfg(feature = "wlr")]
 use wayland_protocols_wlr::{
     layer_shell::v1::client::{
         zwlr_layer_shell_v1::ZwlrLayerShellV1,
@@ -60,10 +67,12 @@ use wayland_protocols_wlr::{
     },
 };
 
+#[cfg(feature = "dmabuf")]
+use crate::screencopy::DMAFrameFormat;
 use crate::{
     output::OutputInfo,
     region::{LogicalRegion, Position, Size, TopLevel},
-    screencopy::{DMAFrameFormat, FrameFormat},
+    screencopy::FrameFormat,
 };
 
 #[derive(Debug)]
@@ -208,26 +217,33 @@ pub enum FrameState {
 
 pub struct CaptureFrameState {
     pub formats: Vec<FrameFormat>,
+    #[cfg(feature = "dmabuf")]
     pub dmabuf_formats: Vec<DMAFrameFormat>,
     pub state: Option<FrameState>,
     pub buffer_done: AtomicBool,
     pub toplevels: Vec<TopLevel>,
     pub(crate) session_done: bool,
+    #[cfg(feature = "dmabuf")]
     pub(crate) gbm: Option<gbm::Device<Card>>,
+    #[cfg(feature = "dmabuf")]
     find_gbm: bool,
     session_size: Size,
 }
 
 impl CaptureFrameState {
+    #[cfg_attr(not(feature = "dmabuf"), allow(unused_variables))]
     pub(crate) fn new(find_gbm: bool) -> Self {
         Self {
             formats: Vec::new(),
+            #[cfg(feature = "dmabuf")]
             dmabuf_formats: Vec::new(),
             state: None,
             buffer_done: AtomicBool::new(false),
             toplevels: Vec::new(),
             session_done: false,
+            #[cfg(feature = "dmabuf")]
             gbm: None,
+            #[cfg(feature = "dmabuf")]
             find_gbm,
             session_size: Size {
                 width: 0,
@@ -237,6 +253,7 @@ impl CaptureFrameState {
     }
 }
 
+#[cfg(feature = "dmabuf")]
 impl Dispatch<ZwpLinuxDmabufV1, ()> for CaptureFrameState {
     fn event(
         _frame: &mut Self,
@@ -249,6 +266,7 @@ impl Dispatch<ZwpLinuxDmabufV1, ()> for CaptureFrameState {
     }
 }
 
+#[cfg(feature = "dmabuf")]
 impl Dispatch<ZwpLinuxBufferParamsV1, ()> for CaptureFrameState {
     fn event(
         _state: &mut Self,
@@ -304,6 +322,7 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for CaptureFrameState {
                     format.stride = 4 * width;
                 }
 
+                #[cfg(feature = "dmabuf")]
                 for DMAFrameFormat {
                     size:
                         Size {
@@ -328,6 +347,7 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for CaptureFrameState {
                 let set_format = &mut state.formats[0];
                 set_format.format = format;
             }
+            #[cfg(feature = "dmabuf")]
             ext_image_copy_capture_session_v1::Event::DmabufDevice { device } => {
                 if !state.find_gbm {
                     return;
@@ -360,6 +380,7 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for CaptureFrameState {
                 };
                 state.gbm = Some(gbm);
             }
+            #[cfg(feature = "dmabuf")]
             ext_image_copy_capture_session_v1::Event::DmabufFormat { format, .. } => {
                 state.dmabuf_formats.push(DMAFrameFormat {
                     format,
@@ -422,6 +443,7 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for CaptureFrameState {
     }
 }
 
+#[cfg(feature = "wlr")]
 impl Dispatch<ZwlrScreencopyFrameV1, ()> for CaptureFrameState {
     #[tracing::instrument(skip(frame), ret, level = "trace")]
     fn event(
@@ -459,6 +481,7 @@ impl Dispatch<ZwlrScreencopyFrameV1, ()> for CaptureFrameState {
                 frame.state.replace(FrameState::Failed);
             }
             zwlr_screencopy_frame_v1::Event::Damage { .. } => {}
+            #[cfg(feature = "dmabuf")]
             zwlr_screencopy_frame_v1::Event::LinuxDmabuf {
                 format,
                 width,
@@ -483,6 +506,7 @@ impl Dispatch<ZwlrScreencopyFrameV1, ()> for CaptureFrameState {
 delegate_noop!(CaptureFrameState: ignore WlShm);
 delegate_noop!(CaptureFrameState: ignore WlShmPool);
 delegate_noop!(CaptureFrameState: ignore WlBuffer);
+#[cfg(feature = "wlr")]
 delegate_noop!(CaptureFrameState: ignore ZwlrScreencopyManagerV1);
 delegate_noop!(CaptureFrameState: ignore ExtImageCopyCaptureManagerV1);
 delegate_noop!(CaptureFrameState: ignore ExtOutputImageCaptureSourceManagerV1);
@@ -492,6 +516,7 @@ delegate_noop!(CaptureFrameState: ignore ExtForeignToplevelImageCaptureSourceMan
 // TODO: Create a xdg-shell surface, check for the enter event, grab the output from it.
 
 pub struct WayshotState {}
+#[cfg(feature = "dmabuf")]
 delegate_noop!(WayshotState: ignore ZwpLinuxDmabufV1);
 impl wayland_client::Dispatch<wl_registry::WlRegistry, GlobalListContents> for WayshotState {
     fn event(
@@ -505,19 +530,29 @@ impl wayland_client::Dispatch<wl_registry::WlRegistry, GlobalListContents> for W
     }
 }
 
+#[cfg(feature = "wlr")]
 pub struct LayerShellState {
     pub configured_outputs: HashSet<WlOutput>,
 }
 
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WlCompositor);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WlShm);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WlShmPool);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WlBuffer);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore ZwlrLayerShellV1);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WlSurface);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WpViewport);
+#[cfg(feature = "wlr")]
 delegate_noop!(LayerShellState: ignore WpViewporter);
 
+#[cfg(feature = "wlr")]
 impl wayland_client::Dispatch<ZwlrLayerSurfaceV1, WlOutput> for LayerShellState {
     // No need to instrument here, span from lib.rs is automatically used.
     fn event(
@@ -546,18 +581,22 @@ impl wayland_client::Dispatch<ZwlrLayerSurfaceV1, WlOutput> for LayerShellState 
         }
     }
 }
+#[cfg(feature = "dmabuf")]
 pub(crate) struct Card(std::fs::File);
 
 /// Implementing [`AsFd`] is a prerequisite to implementing the traits found
 /// in this crate. Here, we are just calling [`File::as_fd()`] on the inner
 /// [`File`].
+#[cfg(feature = "dmabuf")]
 impl AsFd for Card {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.0.as_fd()
     }
 }
+#[cfg(feature = "dmabuf")]
 impl drm::Device for Card {}
 /// Simple helper methods for opening a `Card`.
+#[cfg(feature = "dmabuf")]
 impl Card {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let mut options = std::fs::OpenOptions::new();
@@ -566,6 +605,7 @@ impl Card {
         Ok(Card(options.open(path)?))
     }
 }
+#[cfg(feature = "dmabuf")]
 #[derive(Debug)]
 pub(crate) struct DMABUFState {
     pub linux_dmabuf: ZwpLinuxDmabufV1,

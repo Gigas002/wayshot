@@ -4,6 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "dmabuf")]
 use gbm::BufferObject;
 use image::{ColorType, DynamicImage, ImageBuffer, Pixel, Rgba};
 use memmap2::MmapMut;
@@ -34,9 +35,11 @@ impl Drop for FrameGuard {
     }
 }
 
+#[cfg(feature = "dmabuf")]
 pub struct DMAFrameGuard {
     pub buffer: WlBuffer,
 }
+#[cfg(feature = "dmabuf")]
 impl Drop for DMAFrameGuard {
     fn drop(&mut self) {
         self.buffer.destroy();
@@ -60,6 +63,7 @@ pub struct FrameFormat {
 /// Type of DMABUF frame supported by the compositor
 ///
 /// See `zwlr_screencopy_frame_v1::Event::linux_dmabuf` as it's retrieved from there.
+#[cfg(feature = "dmabuf")]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct DMAFrameFormat {
     pub format: u32,
@@ -93,6 +97,7 @@ where
 #[derive(Debug)]
 pub enum FrameData {
     Mmap(MmapMut),
+    #[cfg(feature = "dmabuf")]
     GBMBo(BufferObject<()>),
 }
 /// The copied frame comprising of the FrameFormat, ColorType (Rgba8), and a memory backed shm
@@ -116,8 +121,11 @@ impl FrameCopy {
         }
         let frame_color_type = match create_converter(self.frame_format.format) {
             Some(converter) => {
-                let FrameData::Mmap(raw) = &mut self.frame_data else {
-                    return Err(Error::InvalidColor);
+                #[allow(clippy::infallible_destructuring_match)]
+                let raw = match &mut self.frame_data {
+                    FrameData::Mmap(raw) => raw,
+                    #[cfg(feature = "dmabuf")]
+                    FrameData::GBMBo(_) => return Err(Error::InvalidColor),
                 };
                 converter.convert_inplace(raw)
             }
@@ -142,6 +150,7 @@ impl FrameCopy {
 
         match self.frame_data {
             FrameData::Mmap(frame_mmap) => create_image_buffer(&self.frame_format, frame_mmap),
+            #[cfg(feature = "dmabuf")]
             FrameData::GBMBo(_) => todo!(),
         }
     }
@@ -161,6 +170,7 @@ impl TryFrom<&FrameCopy> for DynamicImage {
             ColorType::Rgb8 => {
                 let frame_data = match &value.frame_data {
                     FrameData::Mmap(frame_mmap) => frame_mmap.to_vec(),
+                    #[cfg(feature = "dmabuf")]
                     FrameData::GBMBo(_) => todo!(),
                 };
                 Self::ImageRgb8(create_image_buffer(&value.frame_format, frame_data)?)
@@ -168,6 +178,7 @@ impl TryFrom<&FrameCopy> for DynamicImage {
             ColorType::Rgba8 => {
                 let frame_data = match &value.frame_data {
                     FrameData::Mmap(frame_mmap) => frame_mmap.to_vec(),
+                    #[cfg(feature = "dmabuf")]
                     FrameData::GBMBo(_) => todo!(),
                 };
                 Self::ImageRgba8(create_image_buffer(&value.frame_format, frame_data)?)

@@ -9,13 +9,15 @@ repository.workspace = true
 edition.workspace = true
 
 [features]
-default = ["png", "egl"]
+default = ["png", "egl", "dmabuf", "wlr"]
 png = ["image/png"]
 jpeg = ["image/jpeg"]
 qoi = ["image/qoi"]
 webp = ["image/webp"]
 avif = ["image/avif"]
-egl = ["dep:gl", "dep:r-egl-wayland"]
+egl = ["dep:gl", "dep:r-egl-wayland", "dmabuf"]
+dmabuf = ["dep:gbm", "dep:drm"]
+wlr = ["dep:wayland-protocols-wlr"]
 
 [dependencies]
 tracing.workspace = true
@@ -30,11 +32,11 @@ wayland-protocols = { workspace = true, features = [
 	"staging",
 	"unstable",
 ] }
-wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"], optional = true }
 wayland-backend = { version = "0.3", features = ["client_system"] }
 
-gbm = "0.18"
-drm = "0.15"
+gbm = { version = "0.18", optional = true }
+drm = { version = "0.15", optional = true }
 
 gl = { workspace = true, optional = true }
 r-egl-wayland = { workspace = true, optional = true }

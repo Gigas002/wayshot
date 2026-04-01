@@ -14,26 +14,39 @@ pub mod region;
 pub mod screencast;
 mod screencopy;
 
-use std::{
-    collections::HashSet, fs::File, os::fd::AsFd, path::Path, sync::atomic::Ordering, thread,
-};
+#[cfg(feature = "dmabuf")]
+use std::path::Path;
+#[cfg(feature = "wlr")]
+use std::{collections::HashSet, sync::atomic::Ordering};
+use std::{fs::File, os::fd::AsFd, thread};
 
-use dispatch::{DMABUFState, LayerShellState};
+#[cfg(feature = "dmabuf")]
+use dispatch::DMABUFState;
+#[cfg(feature = "wlr")]
+use dispatch::LayerShellState;
 use image::DynamicImage;
 use memmap2::MmapMut;
-use screencopy::{
-    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
-};
+#[cfg(feature = "dmabuf")]
+use screencopy::{DMAFrameFormat, DMAFrameGuard};
+use screencopy::{FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd};
+#[cfg(feature = "wlr")]
 use tracing::debug;
+#[cfg(feature = "wlr")]
+use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::{
     Connection, EventQueue, Proxy,
     globals::{GlobalList, registry_queue_init},
     protocol::{
-        wl_compositor::WlCompositor,
         wl_output::{Transform, WlOutput},
         wl_shm::{self, WlShm},
     },
 };
+#[cfg(feature = "dmabuf")]
+use wayland_protocols::wp::linux_dmabuf::zv1::client::{
+    zwp_linux_buffer_params_v1, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
+};
+#[cfg(feature = "wlr")]
+use wayland_protocols::wp::viewporter::client::wp_viewporter::WpViewporter;
 use wayland_protocols::{
     ext::{
         foreign_toplevel_list::v1::client::{
@@ -49,16 +62,11 @@ use wayland_protocols::{
             ext_image_copy_capture_manager_v1::{ExtImageCopyCaptureManagerV1, Options},
         },
     },
-    wp::{
-        linux_dmabuf::zv1::client::{
-            zwp_linux_buffer_params_v1, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
-        },
-        viewporter::client::wp_viewporter::WpViewporter,
-    },
     xdg::xdg_output::zv1::client::{
         zxdg_output_manager_v1::ZxdgOutputManagerV1, zxdg_output_v1::ZxdgOutputV1,
     },
 };
+#[cfg(feature = "wlr")]
 use wayland_protocols_wlr::{
     layer_shell::v1::client::{
         zwlr_layer_shell_v1::{Layer, ZwlrLayerShellV1},
@@ -89,6 +97,7 @@ pub mod reexport {
     pub use wl_output::{Transform, WlOutput};
     pub use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
 }
+#[cfg(feature = "dmabuf")]
 use gbm::{BufferObject, BufferObjectFlags, Device as GBMDevice};
 
 /// Struct to store wayland connection and globals list.
@@ -105,13 +114,16 @@ pub struct WayshotConnection {
     pub globals: GlobalList,
     output_infos: Vec<OutputInfo>,
     toplevel_infos: Vec<TopLevel>,
+    #[cfg(feature = "dmabuf")]
     dmabuf_state: Option<DMABUFState>,
     toplevel_capture_support: bool,
     image_copy_support: bool,
+    #[cfg(feature = "dmabuf")]
     find_dmabuf: bool,
 }
 
 pub enum WayshotFrame {
+    #[cfg(feature = "wlr")]
     WlrScreenshot(ZwlrScreencopyFrameV1),
     ExtImageCopy(ExtImageCopyCaptureFrameV1),
 }
@@ -182,9 +194,11 @@ impl WayshotConnection {
             globals,
             output_infos: Vec::new(),
             toplevel_infos: Vec::new(),
+            #[cfg(feature = "dmabuf")]
             dmabuf_state: None,
             toplevel_capture_support,
             image_copy_support,
+            #[cfg(feature = "dmabuf")]
             find_dmabuf: false,
         };
 
@@ -194,19 +208,24 @@ impl WayshotConnection {
         Ok(initial_state)
     }
 
+    #[cfg(feature = "dmabuf")]
     fn has_gbm(&self) -> bool {
         self.dmabuf_state.is_some()
     }
 
     // NOTE: this function says if we need to try receive the gdm information from ext-image-copy
     fn need_try_find_gbm(&self) -> bool {
-        !self.has_gbm() && self.find_dmabuf
+        #[cfg(feature = "dmabuf")]
+        return !self.has_gbm() && self.find_dmabuf;
+        #[cfg(not(feature = "dmabuf"))]
+        false
     }
     ///Create a WayshotConnection struct having DMA-BUF support
     /// Using this connection is required to make use of the dmabuf functions
     ///# Parameters
     /// - conn: a Wayland connection
     /// - device_path: string pointing to the DRI device that is to be used for creating the DMA-BUFs on. For example: "/dev/dri/renderD128"
+    #[cfg(feature = "dmabuf")]
     pub fn from_connection_with_dmabuf<P: AsRef<Path>>(
         conn: Connection,
         device_path: P,
@@ -224,12 +243,14 @@ impl WayshotConnection {
             globals,
             output_infos: Vec::new(),
             toplevel_infos: vec![],
+            #[cfg(feature = "dmabuf")]
             dmabuf_state: Some(DMABUFState {
                 linux_dmabuf,
                 gbmdev: gbm,
             }),
             toplevel_capture_support,
             image_copy_support,
+            #[cfg(feature = "dmabuf")]
             find_dmabuf: false,
         };
 
@@ -548,6 +569,7 @@ impl WayshotConnection {
     ///   a guard to manage the frame's lifecycle, and the GPU-backed `BufferObject`.
     /// # Errors
     /// - Returns `NoDMAStateError` if the DMA-BUF state is not initialized a the time of initialization of this struct.
+    #[cfg(feature = "dmabuf")]
     pub fn capture_target_frame_dmabuf(
         &self,
         target: &WayshotTarget,
@@ -598,6 +620,7 @@ impl WayshotConnection {
     // format. Consequently, using PipeWire to capture streams without knowing
     // the current format can lead to color distortion. This function attempts
     // a trial screenshot to determine the screen's properties.
+    #[cfg(feature = "wlr")]
     fn capture_output_frame_get_state_wlr(
         &self,
         mut state: CaptureFrameState,
@@ -760,6 +783,7 @@ impl WayshotConnection {
     // format. Consequently, using PipeWire to capture streams without knowing
     // the current format can lead to color distortion. This function attempts
     // a trial screenshot to determine the screen's properties.
+    #[cfg_attr(not(feature = "wlr"), allow(unused_variables))]
     pub fn capture_output_frame_get_state(
         &self,
         output: &WlOutput,
@@ -784,16 +808,24 @@ impl WayshotConnection {
                 cursor_overlay,
                 output,
             ),
-            Err(_) => self.capture_output_frame_get_state_wlr(
-                state,
-                event_queue,
-                output,
-                cursor_overlay,
-                capture_region,
-            ),
+            Err(_) => {
+                #[cfg(feature = "wlr")]
+                return self.capture_output_frame_get_state_wlr(
+                    state,
+                    event_queue,
+                    output,
+                    cursor_overlay,
+                    capture_region,
+                );
+                #[cfg(not(feature = "wlr"))]
+                return Err(Error::ProtocolNotFound(
+                    "ext-image-copy-capture required (wlr feature disabled)".to_string(),
+                ));
+            }
         }
     }
 
+    #[cfg(feature = "dmabuf")]
     #[allow(clippy::too_many_arguments)]
     fn capture_output_frame_inner_dmabuf<T: AsFd>(
         &self,
@@ -806,6 +838,7 @@ impl WayshotConnection {
         fd: T,
     ) -> Result<DMAFrameGuard> {
         match frame {
+            #[cfg(feature = "wlr")]
             WayshotFrame::WlrScreenshot(frame) => self.capture_output_frame_inner_dmabuf_wlr(
                 state,
                 event_queue,
@@ -827,6 +860,7 @@ impl WayshotConnection {
         }
     }
 
+    #[cfg(feature = "dmabuf")]
     #[allow(clippy::too_many_arguments)]
     fn ext_image_copy_frame_dmabuf_inner<T: AsFd>(
         &self,
@@ -900,6 +934,7 @@ impl WayshotConnection {
         }
     }
 
+    #[cfg(all(feature = "dmabuf", feature = "wlr"))]
     #[allow(clippy::too_many_arguments)]
     fn capture_output_frame_inner_dmabuf_wlr<T: AsFd>(
         &self,
@@ -983,6 +1018,7 @@ impl WayshotConnection {
         fd: T,
     ) -> Result<FrameGuard> {
         match frame {
+            #[cfg(feature = "wlr")]
             WayshotFrame::WlrScreenshot(frame) => {
                 self.wlr_screencopy_inner(state, event_queue, frame, frame_format, fd)
             }
@@ -992,6 +1028,7 @@ impl WayshotConnection {
         }
     }
 
+    #[cfg(feature = "wlr")]
     fn wlr_screencopy_inner<T: AsFd>(
         &self,
         mut state: CaptureFrameState,
@@ -1177,6 +1214,7 @@ impl WayshotConnection {
 
     /// Create a layer shell surface for each output,
     /// render the screen captures on them and use the callback to select a region from them
+    #[cfg(feature = "wlr")]
     fn overlay_frames_and_select_region<F>(
         &self,
         frames: &[(FrameCopy, FrameGuard, OutputInfo)],
@@ -1337,11 +1375,14 @@ impl WayshotConnection {
                 RegionCapturer::TopLevel(ref toplevel) => {
                     return self.capture_toplevel(toplevel.as_ref(), cursor_overlay);
                 }
+                #[cfg(feature = "wlr")]
                 RegionCapturer::Freeze(_) => self
                     .get_all_outputs()
                     .iter()
                     .map(|output_info| (output_info.clone(), None))
                     .collect(),
+                #[cfg(not(feature = "wlr"))]
+                RegionCapturer::Freeze(_) => unreachable!(),
             };
 
         let frames = self.capture_frame_copies(&outputs_capture_regions, cursor_overlay)?;
@@ -1349,9 +1390,12 @@ impl WayshotConnection {
         let capture_region: LogicalRegion = match region_capturer {
             RegionCapturer::Outputs(outputs) => outputs.as_slice().try_into()?,
             RegionCapturer::Region(region) => region,
+            #[cfg(feature = "wlr")]
             RegionCapturer::Freeze(callback) => {
                 self.overlay_frames_and_select_region(&frames, callback)?
             }
+            #[cfg(not(feature = "wlr"))]
+            RegionCapturer::Freeze(_) => unreachable!(),
             RegionCapturer::TopLevel(_) => unreachable!("TopLevel handled earlier"),
         };
 
@@ -1558,8 +1602,11 @@ impl WayshotConnection {
     ) -> Result<(FrameFormat, FrameGuard)> {
         let (state, event_queue, frame, frame_format) =
             self.capture_toplevel_frame_get_state_shm(toplevel, cursor_overlay)?;
-        let WayshotFrame::ExtImageCopy(frame) = frame else {
-            unreachable!()
+        #[allow(clippy::infallible_destructuring_match)]
+        let frame = match frame {
+            WayshotFrame::ExtImageCopy(f) => f,
+            #[cfg(feature = "wlr")]
+            WayshotFrame::WlrScreenshot(_) => unreachable!(),
         };
         let frame_guard =
             self.ext_image_copy_frame_inner(state, event_queue, frame, frame_format, fd)?;
@@ -1576,8 +1623,11 @@ impl WayshotConnection {
         let (state, event_queue, frame) =
             self.capture_toplevel_frame_get_state(toplevel, cursor_overlay)?;
 
-        let WayshotFrame::ExtImageCopy(frame) = frame else {
-            unreachable!()
+        #[allow(clippy::infallible_destructuring_match)]
+        let frame = match frame {
+            WayshotFrame::ExtImageCopy(f) => f,
+            #[cfg(feature = "wlr")]
+            WayshotFrame::WlrScreenshot(_) => unreachable!(),
         };
         if let Some(format) = state
             .formats
@@ -1604,8 +1654,11 @@ impl WayshotConnection {
 
         file.set_len(frame_format.byte_size())?;
 
-        let WayshotFrame::ExtImageCopy(frame) = frame else {
-            unreachable!()
+        #[allow(clippy::infallible_destructuring_match)]
+        let frame = match frame {
+            WayshotFrame::ExtImageCopy(f) => f,
+            #[cfg(feature = "wlr")]
+            WayshotFrame::WlrScreenshot(_) => unreachable!(),
         };
         let frame_guard =
             self.ext_image_copy_frame_inner(state, event_queue, frame, frame_format, file)?;

@@ -1,6 +1,8 @@
 use std::{io, result};
 
+#[cfg(feature = "dmabuf")]
 use drm::buffer::UnrecognizedFourcc;
+#[cfg(feature = "dmabuf")]
 use gbm::InvalidFdError;
 #[cfg(feature = "egl")]
 use r_egl_wayland::r_egl as egl;
@@ -41,10 +43,12 @@ pub enum Error {
     ProtocolNotFound(String),
     #[error("error occurred in freeze callback")]
     FreezeCallbackError(String),
+    #[cfg(feature = "dmabuf")]
     #[error(
         "dmabuf configuration not initialized. Did you not use Wayshot::from_connection_with_dmabuf()?"
     )]
     NoDMAStateError,
+    #[cfg(feature = "dmabuf")]
     #[error("dmabuf color format provided by compositor is invalid")]
     UnrecognizedColorCode(#[from] UnrecognizedFourcc),
     #[cfg(feature = "egl")]
@@ -57,6 +61,7 @@ pub enum Error {
     CaptureFailed(String),
     #[error("Unsupported for some reason: {0}")]
     Unsupported(String),
+    #[cfg(feature = "dmabuf")]
     #[error("Fd does not exist")]
     InvalidFd(#[from] InvalidFdError),
 }
@@ -64,6 +69,7 @@ pub enum Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "dmabuf")]
     use drm::buffer::UnrecognizedFourcc;
     use wayland_client::{
         ConnectError, DispatchError,
@@ -248,6 +254,7 @@ mod tests {
         assert_eq!(err.to_string(), "error occurred in freeze callback");
     }
 
+    #[cfg(feature = "dmabuf")]
     #[test]
     fn test_display_no_dma_state_error() {
         let err = Error::NoDMAStateError;
@@ -255,6 +262,7 @@ mod tests {
         assert_eq!(err.to_string(), expected_msg);
     }
 
+    #[cfg(feature = "dmabuf")]
     #[test]
     fn test_from_unrecognised_fourcc() {
         let fourcc_error = UnrecognizedFourcc(42);
