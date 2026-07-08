@@ -4,6 +4,7 @@ use std::time::Duration;
 use clap::Parser;
 use eyre::Result;
 use libwayshot::WayshotConnection;
+use serde_json::Value;
 
 mod cli;
 #[cfg(feature = "clipboard")]
@@ -55,10 +56,25 @@ fn main() -> Result<()> {
             connection.print_displays_info();
             Ok(())
         }
+        Command::ListOutputsJson => {
+            connection.print_displays_info_json();
+            Ok(())
+        }
         Command::ListToplevels => {
             for tl in connection.get_all_toplevels().iter().filter(|t| t.active) {
                 writeln!(writer, "{}", tl.id_title_identifier())?;
             }
+            writer.flush()?;
+            Ok(())
+        }
+        Command::ListToplevelsJson => {
+            let toplevels: Vec<Value> = connection
+                .get_all_toplevels()
+                .iter()
+                .filter(|t| t.active)
+                .map(|tl| tl.id_title_identifier_json())
+                .collect();
+            writeln!(writer, "{}", serde_json::to_string_pretty(&toplevels)?)?;
             writer.flush()?;
             Ok(())
         }

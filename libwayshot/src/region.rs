@@ -3,6 +3,7 @@ use crate::{
     error::{Error, Result},
     output::OutputInfo,
 };
+use serde_json::{Value, json};
 use std::cmp;
 use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
 
@@ -56,6 +57,13 @@ impl TopLevel {
             "app_id: \"{}\", title: \"{}\", identifier: \"{}\"",
             self.app_id, self.title, self.identifier
         )
+    }
+    pub fn id_title_identifier_json(&self) -> Value {
+        json!({
+            "app_id": self.app_id,
+            "title": self.title,
+            "identifier": self.identifier
+        })
     }
 }
 

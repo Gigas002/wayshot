@@ -13,8 +13,12 @@ pub(crate) enum Command {
     ListOutputs,
     /// Print detailed info about all connected outputs and exit.
     ListOutputsInfo,
-    /// Print the id+title strings of all active toplevels and exit.
+    /// Print detailed info about all connected outputs in JSON format and exit.
+    ListOutputsJson,
+    /// Print the id+title+identifier strings of all active toplevels and exit.
     ListToplevels,
+    /// Print the id+title+identifier strings of all active toplevels in JSON format and exit.
+    ListToplevelsJson,
     /// Pick a pixel color interactively and exit.
     #[cfg(feature = "color_picker")]
     ColorPicker(crate::cli::ColorFormat),
@@ -124,11 +128,17 @@ impl AppSettings {
             if cli.list_outputs {
                 break 'cmd Command::ListOutputs;
             }
+            if cli.list_outputs_json {
+                break 'cmd Command::ListOutputsJson;
+            }
             if cli.list_outputs_info {
                 break 'cmd Command::ListOutputsInfo;
             }
             if cli.list_toplevels {
                 break 'cmd Command::ListToplevels;
+            }
+            if cli.list_toplevels_json {
+                break 'cmd Command::ListToplevelsJson;
             }
             #[cfg(feature = "color_picker")]
             if let Some(fmt) = cli.color.clone() {

@@ -99,6 +99,8 @@ pub mod reexport {
 #[cfg(feature = "dmabuf")]
 use gbm::{BufferObject, BufferObjectFlags, Device as GBMDevice};
 
+use serde_json::{Value, json};
+
 /// Struct to store wayland connection and globals list.
 /// # Example usage
 ///
@@ -480,6 +482,52 @@ impl WayshotConnection {
             println!("    LogicSize: {logical_width}, {logical_height}");
             println!("    Position: {x}, {y}");
         }
+    }
+
+    /// print the displays' info in JSON format
+    pub fn print_displays_info_json(&self) {
+        let outputs: Vec<Value> = self
+            .get_all_outputs()
+            .iter()
+            .map(
+                |OutputInfo {
+                     physical_size: Size { width, height },
+                     logical_region:
+                         LogicalRegion {
+                             inner:
+                                 region::Region {
+                                     position: region::Position { x, y },
+                                     size:
+                                         Size {
+                                             width: logical_width,
+                                             height: logical_height,
+                                         },
+                                 },
+                         },
+                     name,
+                     description,
+                     ..
+                 }| {
+                    json!({
+                        "name": name,
+                        "description": description,
+                        "size": {
+                            "width": width,
+                            "height": height
+                        },
+                        "logical_size": {
+                            "width": logical_width,
+                            "height": logical_height
+                        },
+                        "position": {
+                            "x": x,
+                            "y": y
+                        }
+                    })
+                },
+            )
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&outputs).unwrap());
     }
 
     /// Query which `wl_shm::Format` the compositor supports for this output by performing a trial screenshot through wlr-screencopy protocol.
