@@ -25,7 +25,7 @@
       packages = forAllSystems (
         pkgs:
         let
-          inherit (pkgs) lib;
+          inherit (pkgs) lib stdenv;
         in
         {
           default = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
@@ -33,8 +33,18 @@
             version = "${(builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version}-git";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = [ pkgs.pkg-config ];
+            nativeBuildInputs = with pkgs; [
+              pkg-config
+              installShellFiles
+            ];
             buildInputs = mkDeps pkgs;
+
+            postInstall = lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
+              installShellCompletion --cmd wayshot \
+                --bash <($out/bin/wayshot --completions bash) \
+                --fish <($out/bin/wayshot --completions fish) \
+                --zsh <($out/bin/wayshot --completions zsh)
+            '';
 
             meta = {
               description = "Screenshot crate for wlroots based compositors implementing the zwlr_screencopy_v1 protocol.";
