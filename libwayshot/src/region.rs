@@ -53,7 +53,7 @@ impl TopLevel {
     }
     pub fn id_title_identifier(&self) -> String {
         format!(
-            "app_id: \"{}\", title: \"{}\", identifier:\"{}\"",
+            "app_id: \"{}\", title: \"{}\", identifier: \"{}\"",
             self.app_id, self.title, self.identifier
         )
     }
