@@ -39,7 +39,6 @@
             meta = {
               description = "Screenshot crate for wlroots based compositors implementing the zwlr_screencopy_v1 protocol.";
               homepage = "https://crates.io/crates/wayshot";
-              changelog = "https://github.com/waycrate/wayshot/releases/tag/v${finalAttrs.version}";
               license = with lib.licenses; [
                 bsd2
                 gpl3Only
