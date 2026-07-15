@@ -3,13 +3,7 @@ use std::time::Duration;
 
 use clap::Parser;
 use eyre::Result;
-use libwayshot::{
-    WayshotConnection,
-    output::OutputInfo,
-    region,
-    region::{LogicalRegion, Size},
-};
-use serde_json::{Value, json};
+use libwayshot::WayshotConnection;
 
 mod cli;
 #[cfg(feature = "clipboard")]
@@ -17,6 +11,7 @@ mod clipboard;
 #[cfg(feature = "color_picker")]
 mod color_picker;
 mod config;
+mod listing;
 #[cfg(feature = "logger")]
 mod logger;
 #[cfg(feature = "notifications")]
@@ -25,6 +20,7 @@ mod screenshot;
 mod settings;
 mod utils;
 
+use crate::listing::{DisplayInfo, PositionInfo, SizeInfo, ToplevelInfo};
 use config::Config;
 use settings::{AppSettings, Command};
 
@@ -62,46 +58,25 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::ListOutputsJson => {
-            let outputs: Vec<Value> = connection
+            let outputs: Vec<DisplayInfo> = connection
                 .get_all_outputs()
                 .iter()
-                .map(
-                    |OutputInfo {
-                         physical_size: Size { width, height },
-                         logical_region:
-                             LogicalRegion {
-                                 inner:
-                                     region::Region {
-                                         position: region::Position { x, y },
-                                         size:
-                                             Size {
-                                                 width: logical_width,
-                                                 height: logical_height,
-                                             },
-                                     },
-                             },
-                         name,
-                         description,
-                         ..
-                     }| {
-                        json!({
-                            "name": name,
-                            "description": description,
-                            "size": {
-                                "width": width,
-                                "height": height
-                            },
-                            "logical_size": {
-                                "width": logical_width,
-                                "height": logical_height
-                            },
-                            "position": {
-                                "x": x,
-                                "y": y
-                            }
-                        })
+                .map(|output| DisplayInfo {
+                    name: output.name.clone(),
+                    description: output.description.clone(),
+                    size: SizeInfo {
+                        width: output.physical_size.width,
+                        height: output.physical_size.height,
                     },
-                )
+                    logical_size: SizeInfo {
+                        width: output.logical_region.inner.size.width,
+                        height: output.logical_region.inner.size.height,
+                    },
+                    position: PositionInfo {
+                        x: output.logical_region.inner.position.x,
+                        y: output.logical_region.inner.position.y,
+                    },
+                })
                 .collect();
             println!("{}", serde_json::to_string_pretty(&outputs).unwrap());
             Ok(())
@@ -114,16 +89,14 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::ListToplevelsJson => {
-            let toplevels: Vec<Value> = connection
+            let toplevels: Vec<ToplevelInfo> = connection
                 .get_all_toplevels()
                 .iter()
                 .filter(|t| t.active)
-                .map(|tl| {
-                    json!({
-                        "app_id": tl.app_id,
-                        "title": tl.title,
-                        "identifier": tl.identifier
-                    })
+                .map(|tl| ToplevelInfo {
+                    title: tl.title.clone(),
+                    app_id: tl.app_id.clone(),
+                    identifier: tl.identifier.clone(),
                 })
                 .collect();
             writeln!(writer, "{}", serde_json::to_string_pretty(&toplevels)?)?;
