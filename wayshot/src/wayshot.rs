@@ -3,8 +3,13 @@ use std::time::Duration;
 
 use clap::Parser;
 use eyre::Result;
-use libwayshot::WayshotConnection;
-use serde_json::Value;
+use libwayshot::{
+    WayshotConnection,
+    output::OutputInfo,
+    region,
+    region::{LogicalRegion, Size},
+};
+use serde_json::{Value, json};
 
 mod cli;
 #[cfg(feature = "clipboard")]
@@ -57,7 +62,48 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::ListOutputsJson => {
-            connection.print_displays_info_json();
+            let outputs: Vec<Value> = connection
+                .get_all_outputs()
+                .iter()
+                .map(
+                    |OutputInfo {
+                         physical_size: Size { width, height },
+                         logical_region:
+                             LogicalRegion {
+                                 inner:
+                                     region::Region {
+                                         position: region::Position { x, y },
+                                         size:
+                                             Size {
+                                                 width: logical_width,
+                                                 height: logical_height,
+                                             },
+                                     },
+                             },
+                         name,
+                         description,
+                         ..
+                     }| {
+                        json!({
+                            "name": name,
+                            "description": description,
+                            "size": {
+                                "width": width,
+                                "height": height
+                            },
+                            "logical_size": {
+                                "width": logical_width,
+                                "height": logical_height
+                            },
+                            "position": {
+                                "x": x,
+                                "y": y
+                            }
+                        })
+                    },
+                )
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&outputs).unwrap());
             Ok(())
         }
         Command::ListToplevels => {
@@ -72,7 +118,13 @@ fn main() -> Result<()> {
                 .get_all_toplevels()
                 .iter()
                 .filter(|t| t.active)
-                .map(|tl| tl.id_title_identifier_json())
+                .map(|tl| {
+                    json!({
+                        "app_id": tl.app_id,
+                        "title": tl.title,
+                        "identifier": tl.identifier
+                    })
+                })
                 .collect();
             writeln!(writer, "{}", serde_json::to_string_pretty(&toplevels)?)?;
             writer.flush()?;

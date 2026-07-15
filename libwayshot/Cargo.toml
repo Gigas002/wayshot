@@ -44,4 +44,3 @@ drm = { version = "0.15", optional = true }
 
 gl = { workspace = true, optional = true }
 r-egl-wayland = { workspace = true, optional = true }
-serde_json.workspace = true
