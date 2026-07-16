@@ -78,7 +78,7 @@ fn main() -> Result<()> {
                     },
                 })
                 .collect();
-            println!("{}", serde_json::to_string_pretty(&outputs).unwrap());
+            println!("{}", serde_json::to_string_pretty(&outputs)?);
             Ok(())
         }
         Command::ListToplevels => {
