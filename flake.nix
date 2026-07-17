@@ -40,6 +40,7 @@
             buildInputs = mkDeps pkgs;
 
             postInstall = lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
+              installManPage docs/wayshot.1.scd docs/wayshot.5.scd docs/wayshot.7.scd
               installShellCompletion --cmd wayshot \
                 --bash <($out/bin/wayshot --completions bash) \
                 --fish <($out/bin/wayshot --completions fish) \
