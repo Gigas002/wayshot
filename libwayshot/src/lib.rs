@@ -18,17 +18,20 @@ mod screencopy;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "dmabuf")]
+use std::path::Path;
 use std::{
-    cell::RefCell, collections::HashSet, fs::File, os::fd::AsFd, path::Path,
-    sync::atomic::Ordering, thread,
+    cell::RefCell, collections::HashSet, fs::File, os::fd::AsFd, sync::atomic::Ordering, thread,
 };
 
-use dispatch::{DMABUFState, LayerShellState};
+#[cfg(feature = "dmabuf")]
+use dispatch::DMABUFState;
+use dispatch::LayerShellState;
 use image::DynamicImage;
 use memmap2::MmapMut;
-use screencopy::{
-    DMAFrameFormat, DMAFrameGuard, FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd,
-};
+#[cfg(feature = "dmabuf")]
+use screencopy::{DMAFrameFormat, DMAFrameGuard};
+use screencopy::{FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd};
 use tracing::debug;
 use wayland_client::{
     Connection, EventQueue, Proxy,
@@ -38,6 +41,10 @@ use wayland_client::{
         wl_output::{Transform, WlOutput},
         wl_shm::{self, WlShm},
     },
+};
+#[cfg(feature = "dmabuf")]
+use wayland_protocols::wp::linux_dmabuf::zv1::client::{
+    zwp_linux_buffer_params_v1, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
 };
 use wayland_protocols::{
     ext::{
@@ -54,12 +61,7 @@ use wayland_protocols::{
             ext_image_copy_capture_manager_v1::{ExtImageCopyCaptureManagerV1, Options},
         },
     },
-    wp::{
-        linux_dmabuf::zv1::client::{
-            zwp_linux_buffer_params_v1, zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
-        },
-        viewporter::client::wp_viewporter::WpViewporter,
-    },
+    wp::viewporter::client::wp_viewporter::WpViewporter,
     xdg::xdg_output::zv1::client::{
         zxdg_output_manager_v1::ZxdgOutputManagerV1, zxdg_output_v1::ZxdgOutputV1,
     },
@@ -94,6 +96,7 @@ pub mod reexport {
     pub use wl_output::{Transform, WlOutput};
     pub use wayland_protocols::ext::foreign_toplevel_list::v1::client::ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1;
 }
+#[cfg(feature = "dmabuf")]
 use gbm::{BufferObject, BufferObjectFlags, Device as GBMDevice};
 
 /// Struct to store wayland connection and globals list.
@@ -110,9 +113,11 @@ pub struct WayshotConnection {
     pub globals: GlobalList,
     output_infos: Vec<OutputInfo>,
     toplevel_infos: Vec<TopLevel>,
+    #[cfg(feature = "dmabuf")]
     dmabuf_state: Option<DMABUFState>,
     toplevel_capture_support: bool,
     image_copy_support: bool,
+    #[cfg(feature = "dmabuf")]
     find_dmabuf: bool,
     registers: WayshotRegisters,
 }
@@ -303,9 +308,11 @@ impl WayshotConnection {
             globals,
             output_infos: Vec::new(),
             toplevel_infos: Vec::new(),
+            #[cfg(feature = "dmabuf")]
             dmabuf_state: None,
             toplevel_capture_support: false,
             image_copy_support: false,
+            #[cfg(feature = "dmabuf")]
             find_dmabuf: false,
             registers,
         };
@@ -318,19 +325,30 @@ impl WayshotConnection {
         Ok(initial_state)
     }
 
+    #[cfg(feature = "dmabuf")]
     fn has_gbm(&self) -> bool {
         self.dmabuf_state.is_some()
     }
 
     // NOTE: this function says if we need to try receive the gdm information from ext-image-copy
+    #[cfg(feature = "dmabuf")]
     fn need_try_find_gbm(&self) -> bool {
         !self.has_gbm() && self.find_dmabuf
     }
+
+    // Without the `dmabuf` feature there is no GBM/DRM device to negotiate, so we never
+    // need to ask the compositor for dmabuf device information.
+    #[cfg(not(feature = "dmabuf"))]
+    fn need_try_find_gbm(&self) -> bool {
+        false
+    }
+
     ///Create a WayshotConnection struct having DMA-BUF support
     /// Using this connection is required to make use of the dmabuf functions
     ///# Parameters
     /// - conn: a Wayland connection
     /// - device_path: string pointing to the DRI device that is to be used for creating the DMA-BUFs on. For example: "/dev/dri/renderD128"
+    #[cfg(feature = "dmabuf")]
     pub fn from_connection_with_dmabuf<P: AsRef<Path>>(
         conn: Connection,
         device_path: P,
@@ -652,6 +670,7 @@ impl WayshotConnection {
     ///   a guard to manage the frame's lifecycle, and the GPU-backed `BufferObject`.
     /// # Errors
     /// - Returns `NoDMAStateError` if the DMA-BUF state is not initialized a the time of initialization of this struct.
+    #[cfg(feature = "dmabuf")]
     pub fn capture_target_frame_dmabuf(
         &self,
         target: &WayshotTarget,
@@ -852,6 +871,7 @@ impl WayshotConnection {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "dmabuf")]
     fn capture_output_frame_inner_dmabuf<T: AsFd>(
         &self,
         state: CaptureFrameState,
@@ -882,6 +902,7 @@ impl WayshotConnection {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "dmabuf")]
     fn ext_image_copy_frame_dmabuf_inner<T: AsFd>(
         &self,
         mut state: CaptureFrameState,
@@ -955,6 +976,7 @@ impl WayshotConnection {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "dmabuf")]
     fn capture_output_frame_inner_dmabuf_wlr<T: AsFd>(
         &self,
         mut state: CaptureFrameState,
