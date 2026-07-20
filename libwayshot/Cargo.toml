@@ -19,6 +19,10 @@ dmabuf = ["dep:gbm", "dep:drm"]
 egl = ["dep:gl", "dep:r-egl-wayland", "dmabuf"]
 screencast = ["dmabuf"]
 
+[[example]]
+name = "waymirror"
+required-features = ["screencast"]
+
 [dependencies]
 tracing.workspace = true
 image.workspace = true
