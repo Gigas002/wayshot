@@ -129,6 +129,11 @@ Alternatively, set `stdout = true` in your config file to always write to stdout
 
 `wayshot-git` & `wayshot-bin` have been packaged.
 
+## Nix:
+
+Release builds available in nixpkgs.
+For git version and module [follow instructions](./nix/INSTALL.md)
+
 ## Compile time dependencies:
 
 - scdoc (If present, man-pages will be generated.)

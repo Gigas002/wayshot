@@ -1,84 +1,35 @@
 {
+  description = "wayshot";
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs =
-    { self, nixpkgs }:
-    let
-      forAllSystems =
-        callback:
-        nixpkgs.lib.genAttrs [
-          "x86_64-linux"
-          "aarch64-linux"
-        ] (system: callback nixpkgs.legacyPackages.${system});
+  outputs = inputs @ {
+    self,
+    nixpkgs,
+    ...
+  }: let
+    forAllSystems = callback:
+      nixpkgs.lib.genAttrs [
+        "x86_64-linux"
+        "aarch64-linux"
+      ] (system: callback nixpkgs.legacyPackages.${system});
+  in {
+    packages = forAllSystems (pkgs: rec {
+      default = wayshot;
+      wayshot = pkgs.callPackage ./nix/package.nix {};
+    });
 
-      mkDeps =
-        pkgs: with pkgs; [
-          pango
-          libgbm
-          libGL
-          wayland
-        ];
-    in
-    {
-      packages = forAllSystems (
-        pkgs:
-        let
-          inherit (pkgs) lib stdenv;
-        in
-        {
-          default = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
-            pname = "wayshot";
-            version = "${(builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version}-git";
-            src = ./.;
-            cargoLock.lockFile = ./Cargo.lock;
-            nativeBuildInputs = with pkgs; [
-              pkg-config
-              installShellFiles
-            ];
-            buildInputs = mkDeps pkgs;
+    devShells = forAllSystems (pkgs: {
+      default = pkgs.callPackage ./nix/shell.nix {};
+    });
 
-            postInstall = lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-              installManPage docs/wayshot.1.scd docs/wayshot.5.scd docs/wayshot.7.scd
-              installShellCompletion --cmd wayshot \
-                --bash <($out/bin/wayshot --completions bash) \
-                --fish <($out/bin/wayshot --completions fish) \
-                --zsh <($out/bin/wayshot --completions zsh)
-            '';
-
-            meta = {
-              description = "Screenshot crate for wlroots based compositors implementing the zwlr_screencopy_v1 protocol.";
-              homepage = "https://crates.io/crates/wayshot";
-              license = with lib.licenses; [
-                bsd2
-                gpl3Only
-              ];
-              mainProgram = "wayshot";
-              platforms = lib.platforms.linux;
-            };
-          });
-        }
-      );
-
-      devShells.default = forAllSystems (
-        pkgs:
-        let
-          inherit (pkgs) lib;
-        in
-        pkgs.mkShell {
-          strictDeps = true;
-          nativeBuildInputs = with pkgs; [
-            cargo
-            rustc
-            rust-analyzer
-            clippy
-            rustfmt
-            pkg-config
-          ];
-          buildInputs = mkDeps pkgs;
-          LD_LIBRARY_PATH = lib.makeLibraryPath (mkDeps pkgs);
-        }
-      );
+    overlays.default = final: prev: {
+      wayshot = final.callPackage ./nix/package.nix {};
     };
+
+    homeModules.default = import ./nix/module.nix {inherit self;};
+    formatter.x86_64-linux = inputs.nixpkgs.legacyPackages.x86_64-linux.alejandra;
+  };
 }
