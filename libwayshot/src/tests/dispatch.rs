@@ -1,7 +1,9 @@
-use crate::dispatch::{CaptureFrameState, Card};
+use crate::dispatch::CaptureFrameState;
 
+#[cfg(feature = "dmabuf")]
 #[test]
 fn card_open_nonexistent_path_errors() {
+    use crate::dispatch::Card;
     let err = Card::open("/nonexistent/dri/renderD999").err().unwrap();
     assert!(err.kind() == std::io::ErrorKind::NotFound);
 }

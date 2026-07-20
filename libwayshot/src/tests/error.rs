@@ -1,4 +1,5 @@
 use crate::error::Error;
+#[cfg(feature = "dmabuf")]
 use drm::buffer::UnrecognizedFourcc;
 use wayland_client::{
     ConnectError, DispatchError,
@@ -174,6 +175,7 @@ fn test_display_no_dma_state_error() {
     assert_eq!(err.to_string(), expected_msg);
 }
 
+#[cfg(feature = "dmabuf")]
 #[test]
 fn test_from_unrecognised_fourcc() {
     let fourcc_error = UnrecognizedFourcc(42);

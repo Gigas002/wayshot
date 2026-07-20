@@ -16,11 +16,11 @@ jobs:
             matrix:
                 include:
                     - name: all-features
-                      cargo_args: --workspace --release --all-features
+                      cargo_args: --workspace --release --all-features --all-targets
                     - name: default
-                      cargo_args: --workspace --release
+                      cargo_args: --workspace --release --all-targets
                     - name: minimal
-                      cargo_args: --workspace --release --no-default-features
+                      cargo_args: --workspace --release --no-default-features --all-targets
 
         name: ${{ matrix.name }}
         runs-on: ubuntu-latest
