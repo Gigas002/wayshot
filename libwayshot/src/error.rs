@@ -1,6 +1,8 @@
 use std::{io, result};
 
+#[cfg(feature = "dmabuf")]
 use drm::buffer::UnrecognizedFourcc;
+#[cfg(feature = "dmabuf")]
 use gbm::InvalidFdError;
 #[cfg(feature = "egl")]
 use r_egl_wayland::r_egl as egl;
@@ -45,6 +47,7 @@ pub enum Error {
         "dmabuf configuration not initialized. Did you not use Wayshot::from_connection_with_dmabuf()?"
     )]
     NoDMAStateError,
+    #[cfg(feature = "dmabuf")]
     #[error("dmabuf color format provided by compositor is invalid")]
     UnrecognizedColorCode(#[from] UnrecognizedFourcc),
     #[cfg(feature = "egl")]
@@ -57,6 +60,7 @@ pub enum Error {
     CaptureFailed(String),
     #[error("Unsupported for some reason: {0}")]
     Unsupported(String),
+    #[cfg(feature = "dmabuf")]
     #[error("Fd does not exist")]
     InvalidFd(#[from] InvalidFdError),
 }

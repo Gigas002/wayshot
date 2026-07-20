@@ -124,6 +124,7 @@ pub fn bind_egl_image_to_gl_texture(guard: &EGLImageGuard) -> Result<()> {
 
 /// Create an EGLImage from the DMA-BUF and bind it to the current GL texture, then destroy the EGLImage.
 /// Used by screencast when updating the texture each frame.
+#[cfg(feature = "screencast")]
 pub fn create_egl_image_and_bind_to_gl_texture(
     egl_display: egl::Display,
     bo: &BufferObject<()>,

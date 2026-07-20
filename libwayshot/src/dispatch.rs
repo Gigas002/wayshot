@@ -1,9 +1,13 @@
+#[cfg(feature = "dmabuf")]
 use drm::node::DrmNode;
 use std::{
     collections::HashSet,
+    sync::atomic::{AtomicBool, Ordering},
+};
+#[cfg(feature = "dmabuf")]
+use std::{
     os::fd::{AsFd, BorrowedFd},
     path::Path,
-    sync::atomic::{AtomicBool, Ordering},
 };
 use wayland_client::{
     Connection, Dispatch, QueueHandle,
@@ -213,7 +217,9 @@ pub struct CaptureFrameState {
     pub buffer_done: AtomicBool,
     pub toplevels: Vec<TopLevel>,
     pub(crate) session_done: bool,
+    #[cfg(feature = "dmabuf")]
     pub(crate) gbm: Option<gbm::Device<Card>>,
+    #[cfg_attr(not(feature = "dmabuf"), allow(dead_code))]
     find_gbm: bool,
     session_size: Size,
 }
@@ -227,6 +233,7 @@ impl CaptureFrameState {
             buffer_done: AtomicBool::new(false),
             toplevels: Vec::new(),
             session_done: false,
+            #[cfg(feature = "dmabuf")]
             gbm: None,
             find_gbm,
             session_size: Size {
@@ -326,36 +333,43 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for CaptureFrameState {
                 });
             }
             ext_image_copy_capture_session_v1::Event::DmabufDevice { device } => {
-                if !state.find_gbm {
-                    return;
-                }
-                // Handle potential malformed data from compositor
-                let device = match device.try_into() {
-                    Ok(bytes) => u64::from_le_bytes(bytes),
-                    Err(_) => {
-                        tracing::warn!(
-                            "Received invalid device data from compositor (expected 8 bytes)"
-                        );
+                #[cfg(feature = "dmabuf")]
+                {
+                    if !state.find_gbm {
                         return;
                     }
-                };
-                let Ok(node) = DrmNode::from_dev_id(device) else {
-                    tracing::warn!("Failed to create DRM node from device ID: {}", device);
-                    return;
-                };
-                let Some(pa) = node.dev_path() else {
-                    tracing::warn!("DRM node has no device path");
-                    return;
-                };
-                let Ok(card) = Card::open(&pa) else {
-                    tracing::warn!("Failed to open DRM card at {:?}", pa);
-                    return;
-                };
-                let Ok(gbm) = gbm::Device::new(card) else {
-                    tracing::warn!("Failed to create GBM device");
-                    return;
-                };
-                state.gbm = Some(gbm);
+                    // Handle potential malformed data from compositor
+                    let device = match device.try_into() {
+                        Ok(bytes) => u64::from_le_bytes(bytes),
+                        Err(_) => {
+                            tracing::warn!(
+                                "Received invalid device data from compositor (expected 8 bytes)"
+                            );
+                            return;
+                        }
+                    };
+                    let Ok(node) = DrmNode::from_dev_id(device) else {
+                        tracing::warn!("Failed to create DRM node from device ID: {}", device);
+                        return;
+                    };
+                    let Some(pa) = node.dev_path() else {
+                        tracing::warn!("DRM node has no device path");
+                        return;
+                    };
+                    let Ok(card) = Card::open(&pa) else {
+                        tracing::warn!("Failed to open DRM card at {:?}", pa);
+                        return;
+                    };
+                    let Ok(gbm) = gbm::Device::new(card) else {
+                        tracing::warn!("Failed to create GBM device");
+                        return;
+                    };
+                    state.gbm = Some(gbm);
+                }
+                #[cfg(not(feature = "dmabuf"))]
+                {
+                    let _ = device;
+                }
             }
             ext_image_copy_capture_session_v1::Event::DmabufFormat { format, .. } => {
                 state.dmabuf_formats.push(DMAFrameFormat {
@@ -543,18 +557,22 @@ impl wayland_client::Dispatch<ZwlrLayerSurfaceV1, WlOutput> for LayerShellState 
         }
     }
 }
+#[cfg(feature = "dmabuf")]
 pub(crate) struct Card(std::fs::File);
 
 /// Implementing [`AsFd`] is a prerequisite to implementing the traits found
 /// in this crate. Here, we are just calling [`File::as_fd()`] on the inner
 /// [`File`].
+#[cfg(feature = "dmabuf")]
 impl AsFd for Card {
     fn as_fd(&self) -> BorrowedFd<'_> {
         self.0.as_fd()
     }
 }
+#[cfg(feature = "dmabuf")]
 impl drm::Device for Card {}
 /// Simple helper methods for opening a `Card`.
+#[cfg(feature = "dmabuf")]
 impl Card {
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let mut options = std::fs::OpenOptions::new();
@@ -564,6 +582,7 @@ impl Card {
     }
 }
 #[derive(Debug)]
+#[cfg(feature = "dmabuf")]
 pub(crate) struct DMABUFState {
     pub linux_dmabuf: ZwpLinuxDmabufV1,
     pub gbmdev: gbm::Device<Card>,

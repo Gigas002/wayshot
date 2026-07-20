@@ -15,8 +15,9 @@ jpeg = ["image/jpeg"]
 qoi = ["image/qoi"]
 webp = ["image/webp"]
 avif = ["image/avif"]
-egl = ["dep:gl", "dep:r-egl-wayland"]
-screencast = []
+dmabuf = ["dep:gbm", "dep:drm"]
+egl = ["dep:gl", "dep:r-egl-wayland", "dmabuf"]
+screencast = ["dmabuf"]
 
 [dependencies]
 tracing.workspace = true
@@ -34,8 +35,8 @@ wayland-protocols = { workspace = true, features = [
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 wayland-backend = { version = "0.3", features = ["client_system"] }
 
-gbm = "0.18"
-drm = "0.15"
+gbm = { version = "0.18", optional = true }
+drm = { version = "0.15", optional = true }
 
 gl = { workspace = true, optional = true }
 r-egl-wayland = { workspace = true, optional = true }
