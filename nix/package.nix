@@ -23,7 +23,9 @@
 }:
 rustPlatform.buildRustPackage rec {
   pname = "wayshot";
-  version = "${(builtins.fromTOML (builtins.readFile (src + "/Cargo.toml"))).workspace.package.version}-git";
+  version = "${
+    (builtins.fromTOML (builtins.readFile (src + "/Cargo.toml"))).workspace.package.version
+  }-git";
 
   src = lib.cleanSource ../.;
 
@@ -56,14 +58,17 @@ rustPlatform.buildRustPackage rec {
     wayland
   ];
 
-  postInstall = lib.optionalString (completionsSupport && stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-    installManPage docs/wayshot.1.scd docs/wayshot.5.scd docs/wayshot.7.scd
-    installShellCompletion --cmd wayshot \
-      --bash <($out/bin/wayshot --completions bash) \
-      --fish <($out/bin/wayshot --completions fish) \
-      --zsh <($out/bin/wayshot --completions zsh) \
-      --nushell <($out/bin/wayshot --completions nushell)
-  '';
+  postInstall =
+    ''
+      installManPage docs/wayshot.1.scd docs/wayshot.5.scd docs/wayshot.7.scd
+    ''
+    + lib.optionalString (completionsSupport && stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
+      installShellCompletion --cmd wayshot \
+        --bash <($out/bin/wayshot --completions bash) \
+        --fish <($out/bin/wayshot --completions fish) \
+        --zsh <($out/bin/wayshot --completions zsh) \
+        --nushell <($out/bin/wayshot --completions nushell)
+    '';
 
   meta = {
     description = "Screenshot crate for wlroots based compositors implementing the zwlr_screencopy_v1 protocol.";
