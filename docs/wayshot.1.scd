@@ -36,11 +36,19 @@ Wayshot - Screenshot tool for compositors implementing zwlr_screencopy_v1 such a
 *-l*, *--list-outputs*
 	List all connected output names.
 
+*--list-outputs-json*
+	List all connected outputs with their name, description, size, and position
+	in JSON format.
+
 *--list-outputs-info*
 	List all connected outputs with their name, description, size, and position.
 
 *--list-toplevels*, *--list-windows*
 	List all active toplevel windows, with app_id, title and identifier
+
+*--list-toplevels-json*
+	List all active toplevel windows, with app_id, title and identifier in JSON
+	format.
 
 *--color*
 	Click a pixel and print its RGBA and hex color value. By default the screen is frozen first;

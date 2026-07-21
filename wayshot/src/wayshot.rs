@@ -11,6 +11,7 @@ mod clipboard;
 #[cfg(feature = "color_picker")]
 mod color_picker;
 mod config;
+mod listing;
 #[cfg(feature = "logger")]
 mod logger;
 #[cfg(feature = "notifications")]
@@ -19,6 +20,7 @@ mod screenshot;
 mod settings;
 mod utils;
 
+use crate::listing::{DisplayInfo, PositionInfo, SizeInfo, ToplevelInfo};
 use config::Config;
 use settings::{AppSettings, Command};
 
@@ -84,10 +86,49 @@ fn main() -> Result<()> {
             print_displays_info(&connection);
             Ok(())
         }
+        Command::ListOutputsJson => {
+            let outputs: Vec<DisplayInfo> = connection
+                .get_all_outputs()
+                .iter()
+                .map(|output| DisplayInfo {
+                    name: output.name.clone(),
+                    description: output.description.clone(),
+                    size: SizeInfo {
+                        width: output.physical_size.width,
+                        height: output.physical_size.height,
+                    },
+                    logical_size: SizeInfo {
+                        width: output.logical_region.inner.size.width,
+                        height: output.logical_region.inner.size.height,
+                    },
+                    position: PositionInfo {
+                        x: output.logical_region.inner.position.x,
+                        y: output.logical_region.inner.position.y,
+                    },
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&outputs)?);
+            Ok(())
+        }
         Command::ListToplevels => {
             for tl in connection.get_all_toplevels().iter().filter(|t| t.active) {
                 writeln!(writer, "{}", tl.id_title_identifier())?;
             }
+            writer.flush()?;
+            Ok(())
+        }
+        Command::ListToplevelsJson => {
+            let toplevels: Vec<ToplevelInfo> = connection
+                .get_all_toplevels()
+                .iter()
+                .filter(|t| t.active)
+                .map(|tl| ToplevelInfo {
+                    title: tl.title.clone(),
+                    app_id: tl.app_id.clone(),
+                    identifier: tl.identifier.clone(),
+                })
+                .collect();
+            writeln!(writer, "{}", serde_json::to_string_pretty(&toplevels)?)?;
             writer.flush()?;
             Ok(())
         }

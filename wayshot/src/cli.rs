@@ -71,6 +71,10 @@ pub struct Cli {
     #[arg(short, long, alias = "list-outputs")]
     pub list_outputs: bool,
 
+    /// List all connected outputs with name, description, size and position in JSON format.
+    #[arg(long)]
+    pub list_outputs_json: bool,
+
     /// List all connected outputs with name, description, size, and position.
     #[arg(long)]
     pub list_outputs_info: bool,
@@ -78,6 +82,10 @@ pub struct Cli {
     /// List all active toplevel windows. You will see the information about id+title+identifier
     #[arg(long, alias = "list-windows")]
     pub list_toplevels: bool,
+
+    /// List all active toplevel windows in JSON format
+    #[arg(long, alias = "list-windows-json")]
+    pub list_toplevels_json: bool,
 
     /// Click a point on screen and print its color values.
     /// Optionally accepts a format: plain (default), hex, hex-alpha, rgb, rgba, hsl.
