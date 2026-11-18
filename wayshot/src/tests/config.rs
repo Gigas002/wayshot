@@ -219,10 +219,11 @@ fn png_get_compression_defaults_when_unset() {
         compression: None,
         filter: None,
     };
-    assert_eq!(
-        std::mem::discriminant(&png.get_compression()),
-        std::mem::discriminant(&CompressionType::Default)
-    );
+    assert!(matches!(png.get_compression(), CompressionType::Level(3)));
+    assert!(matches!(
+        Png::default().get_compression(),
+        CompressionType::Level(3)
+    ));
 }
 
 #[test]

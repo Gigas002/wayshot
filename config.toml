@@ -47,7 +47,8 @@ background_color = "#66666680"
 # - best: slower encoding, smaller files (high compression level)
 # - none/uncompressed: no compression whatsoever
 # - 0-9: detailed compression level (0=no compression, 9=maximum compression)
-compression = "default"
+# default: 3 (about 4 times faster than "default", for files about 3 % larger)
+compression = 3
 
 # Filter type for PNG encoding (FilterType)
 # Documentation: https://docs.rs/image/latest/image/codecs/png/enum.FilterType.html

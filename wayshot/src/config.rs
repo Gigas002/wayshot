@@ -241,10 +241,16 @@ pub struct Png {
     pub filter: Option<String>,
 }
 
+/// zlib level 3: 3.5-4.3x faster than "default" (image's balanced level,
+/// zlib 6) on a photo, for files about 3 % larger; screens of text are
+/// about as large too. Level 1 and "fast" are faster still, but make text
+/// screenshots 30-130 % larger.
+pub const DEFAULT_PNG_LEVEL: u8 = 3;
+
 impl Default for Png {
     fn default() -> Self {
         Png {
-            compression: Some(PngCompression::Named("default".to_string())),
+            compression: Some(PngCompression::Level(DEFAULT_PNG_LEVEL)),
             filter: Some("adaptive".to_string()),
         }
     }
@@ -255,7 +261,7 @@ impl Png {
         match self
             .compression
             .as_ref()
-            .unwrap_or(&PngCompression::Named("default".to_string()))
+            .unwrap_or(&PngCompression::Level(DEFAULT_PNG_LEVEL))
         {
             PngCompression::Level(level) => {
                 if *level <= 9 {

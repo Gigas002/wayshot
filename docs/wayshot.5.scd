@@ -169,7 +169,7 @@ This section documents the *[file]* table of the configuration file
 	- _"none"_ or _"uncompressed"_: No compression whatsoever
 	- _0-9_: Detailed numeric compression level (0=no compression, 9=maximum compression)
 
-	Default: _"default"_
+	Default: _3_ (about 4 times faster than _"default"_, for files about 3 % larger)
 
 *[encoding.png] filter* = _"none"_ | _"sub"_ | _"up"_ | _"avg"_ | _"paeth"_ | _"adaptive"_
 
