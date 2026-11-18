@@ -1461,52 +1461,62 @@ impl WayshotConnection {
                 })
                 .collect::<Vec<_>>();
 
-            rotate_join_handles
+            // A panic in a worker is a bug: re-raise it rather than leave a
+            // transparent hole where its output should be.
+            let images = rotate_join_handles
                 .into_iter()
-                .flat_map(|join_handle| join_handle.join())
-                .fold(
-                    None,
-                    |composite_image: Option<Result<_>>, image: Result<_>| {
-                        // Default to a transparent image.
-                        let composite_image = composite_image.unwrap_or_else(|| {
-                            Ok(DynamicImage::new_rgba8(
-                                (capture_region.inner.size.width as f64 * max_scale) as u32,
-                                (capture_region.inner.size.height as f64 * max_scale) as u32,
-                            ))
-                        });
+                .map(|join_handle| {
+                    join_handle
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            if images.is_empty() {
+                tracing::error!("Provided capture region doesn't intersect with any outputs!");
+                return Err(Error::NoOutputs);
+            }
 
-                        Some(|| -> Result<_> {
-                            let mut composite_image = composite_image?;
-                            let (image, frame_region) = image?;
-                            let (x, y) = (
-                                ((frame_region.inner.position.x as f64
-                                    - capture_region.inner.position.x as f64)
-                                    * max_scale) as i64,
-                                ((frame_region.inner.position.y as f64
-                                    - capture_region.inner.position.y as f64)
-                                    * max_scale) as i64,
-                            );
-                            tracing::span!(
-                                tracing::Level::DEBUG,
-                                "replace",
-                                frame_copy_region = format!("{}", frame_region),
-                                capture_region = format!("{}", capture_region),
-                                x = x,
-                                y = y,
-                            )
-                            .in_scope(|| {
-                                tracing::debug!("Replacing parts of the final image");
-                                image::imageops::replace(&mut composite_image, &image, x, y);
-                            });
+            let canvas_width = (capture_region.inner.size.width as f64 * max_scale) as u32;
+            let canvas_height = (capture_region.inner.size.height as f64 * max_scale) as u32;
 
-                            Ok(composite_image)
-                        }())
-                    },
+            // One frame exactly covering the result (one output, or a region
+            // on one output) is the result: no canvas to copy it onto.
+            let covers_canvas = |(image, frame_region): &(DynamicImage, LogicalRegion)| {
+                frame_region.inner.position == capture_region.inner.position
+                    && (image.width(), image.height()) == (canvas_width, canvas_height)
+            };
+            if let [only] = images.as_slice()
+                && covers_canvas(only)
+            {
+                let (image, _) = images.into_iter().next().expect("one image");
+                return Ok(DynamicImage::ImageRgba8(image.into_rgba8()));
+            }
+
+            // Default to a transparent image.
+            let mut composite_image = DynamicImage::new_rgba8(canvas_width, canvas_height);
+            for (image, frame_region) in images {
+                let (x, y) = (
+                    ((frame_region.inner.position.x as f64
+                        - capture_region.inner.position.x as f64)
+                        * max_scale) as i64,
+                    ((frame_region.inner.position.y as f64
+                        - capture_region.inner.position.y as f64)
+                        * max_scale) as i64,
+                );
+                tracing::span!(
+                    tracing::Level::DEBUG,
+                    "replace",
+                    frame_copy_region = format!("{}", frame_region),
+                    capture_region = format!("{}", capture_region),
+                    x = x,
+                    y = y,
                 )
-                .ok_or_else(|| {
-                    tracing::error!("Provided capture region doesn't intersect with any outputs!");
-                    Error::NoOutputs
-                })?
+                .in_scope(|| {
+                    tracing::debug!("Replacing parts of the final image");
+                    image::imageops::replace(&mut composite_image, &image, x, y);
+                });
+            }
+            Ok(composite_image)
         })
     }
 
