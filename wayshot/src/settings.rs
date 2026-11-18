@@ -113,14 +113,20 @@ impl AppSettings {
         // stdout_print starts from config `stdout = true`.
         // resolve_output_file may also flip it to true when FILE is `-`.
         let mut stdout_print = base.stdout.unwrap_or_default();
-        let file = Self::resolve_output_file(
+        let file = match Self::resolve_output_file(
             cli.file.clone(),
             &base,
             &file_config,
             &file_name_format,
             encoding,
             &mut stdout_print,
-        );
+        ) {
+            Ok(file) => file,
+            Err(e) => {
+                tracing::error!("{e}");
+                std::process::exit(1);
+            }
+        };
 
         // ── Command ───────────────────────────────────────────────────────────
         // Query commands are checked first; screenshot mode is the default.
@@ -224,21 +230,21 @@ impl AppSettings {
         file_name_format: &str,
         encoding: EncodingFormat,
         stdout_print: &mut bool,
-    ) -> Option<PathBuf> {
+    ) -> Result<Option<PathBuf>, String> {
         if let Some(path) = cli_file {
             if path.to_string_lossy() == "-" {
                 *stdout_print = true;
-                return None;
+                return Ok(None);
             }
-            return Some(utils::get_full_file_name(&path, file_name_format, encoding));
+            return utils::get_full_file_name(&path, file_name_format, encoding).map(Some);
         }
         if base.file.unwrap_or_default() {
             let dir = file_config
                 .path
                 .clone()
                 .unwrap_or_else(|| env::current_dir().unwrap_or_default());
-            return Some(utils::get_full_file_name(&dir, file_name_format, encoding));
+            return utils::get_full_file_name(&dir, file_name_format, encoding).map(Some);
         }
-        None
+        Ok(None)
     }
 }

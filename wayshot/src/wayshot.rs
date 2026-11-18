@@ -152,7 +152,9 @@ fn main() -> Result<()> {
                     .map_err(|e| eyre::eyre!("Failed to encode image: {e}"))?;
 
                     if let Some(ref f) = settings.file {
-                        std::fs::write(f, &encoded)?;
+                        std::fs::write(f, &encoded).map_err(|e| {
+                            eyre::eyre!("failed to write the screenshot to {}: {e}", f.display())
+                        })?;
                     }
 
                     if settings.stdout_print {

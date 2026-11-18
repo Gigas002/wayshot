@@ -139,14 +139,33 @@ fn get_expanded_path_falls_back_to_cwd_on_unresolved_var() {
 
 #[test]
 fn get_default_file_name_appends_encoding_extension() {
-    let name = get_default_file_name("literal-name", EncodingFormat::Png);
+    let name = get_default_file_name("literal-name", EncodingFormat::Png).unwrap();
     assert_eq!(name, PathBuf::from("literal-name.png"));
+}
+
+/// strftime directives are expanded; an unknown one is an error, where
+/// chrono panicked ("a formatting trait implementation returned an error").
+#[test]
+fn get_default_file_name_formats_and_rejects_bad_directives() {
+    let name = get_default_file_name("wayshot-%Y_%m_%d-%H_%M_%S", EncodingFormat::Png).unwrap();
+    let name = name.to_string_lossy();
+    assert_eq!(
+        name.len(),
+        "wayshot-2026_11_18-10_00_00.png".len(),
+        "{name}"
+    );
+    assert!(
+        name.starts_with("wayshot-2") && !name.contains('%'),
+        "{name}"
+    );
+    let err = get_default_file_name("shot-%K", EncodingFormat::Png).unwrap_err();
+    assert!(err.contains("shot-%K"), "{err}");
 }
 
 #[test]
 fn get_full_file_name_for_directory_uses_default_name() {
     let dir = std::env::temp_dir();
-    let full = get_full_file_name(&dir, "wayshot-test-literal", EncodingFormat::Png);
+    let full = get_full_file_name(&dir, "wayshot-test-literal", EncodingFormat::Png).unwrap();
     assert_eq!(full, dir.join("wayshot-test-literal.png"));
 }
 
@@ -156,7 +175,8 @@ fn get_full_file_name_for_file_path_replaces_extension() {
         Path::new("/tmp/some-nonexistent-file.jpg"),
         "ignored-format",
         EncodingFormat::Png,
-    );
+    )
+    .unwrap();
     assert_eq!(full, PathBuf::from("/tmp/some-nonexistent-file.png"));
 }
 

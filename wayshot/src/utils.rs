@@ -16,7 +16,6 @@ use std::{
     str::FromStr,
 };
 
-use chrono::Local;
 #[cfg(any(feature = "selector", feature = "color_picker"))]
 use libwayshot::{
     Result as WayshotResult,
@@ -320,17 +319,27 @@ pub fn get_expanded_path(path: &Path) -> PathBuf {
     }
 }
 
-pub fn get_default_file_name(filename_format: &str, encoding: EncodingFormat) -> PathBuf {
-    PathBuf::from(format!(
-        "{}.{encoding}",
-        Local::now().format(filename_format)
-    ))
+/// The file name for a screenshot taken now: `filename_format` (strftime)
+/// plus the encoding's extension. A format with an unknown directive is an
+/// error (chrono used to panic on one).
+pub fn get_default_file_name(
+    filename_format: &str,
+    encoding: EncodingFormat,
+) -> Result<PathBuf, String> {
+    let now = jiff::ZonedDateTime::now();
+    let name = jiff::fmt::strtime::format(filename_format, &now)
+        .map_err(|e| format!("invalid file name format '{filename_format}': {e}"))?;
+    Ok(PathBuf::from(format!("{name}.{encoding}")))
 }
 
-pub fn get_full_file_name(path: &Path, filename_format: &str, encoding: EncodingFormat) -> PathBuf {
+pub fn get_full_file_name(
+    path: &Path,
+    filename_format: &str,
+    encoding: EncodingFormat,
+) -> Result<PathBuf, String> {
     let absolute = get_absolute_path(&get_expanded_path(path));
-    if absolute.is_dir() {
-        absolute.join(get_default_file_name(filename_format, encoding))
+    Ok(if absolute.is_dir() {
+        absolute.join(get_default_file_name(filename_format, encoding)?)
     } else {
         let base_dir = absolute
             .parent()
@@ -338,7 +347,7 @@ pub fn get_full_file_name(path: &Path, filename_format: &str, encoding: Encoding
             .unwrap_or_else(|| env::current_dir().unwrap_or_default());
         let stem = absolute.file_stem().unwrap_or_default().to_string_lossy();
         base_dir.join(format!("{stem}.{encoding}"))
-    }
+    })
 }
 
 // ─── Image encoding ───────────────────────────────────────────────────────────

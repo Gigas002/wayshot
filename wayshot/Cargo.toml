@@ -99,7 +99,7 @@ jxl-encoder = { version = "0.3", optional = true }
 
 dialoguer = { version = "0.12", features = ["fuzzy-select"] }
 eyre = "0.6"
-chrono = "0.4"
+jiff = "1"
 
 wl-clipboard-rs = { version = "0.9", optional = true }
 libc = { workspace = true, optional = true }
