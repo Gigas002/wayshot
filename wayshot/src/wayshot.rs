@@ -184,7 +184,13 @@ fn main() -> Result<()> {
                     if settings.notifications {
                         notification::send_success(
                             &shot_result,
-                            settings.file.as_deref(),
+                            notification::Delivery {
+                                saved_to: settings.file.as_deref(),
+                                #[cfg(feature = "clipboard")]
+                                clipboard: settings.clipboard,
+                                #[cfg(not(feature = "clipboard"))]
+                                clipboard: false,
+                            },
                             &settings.notification,
                         );
                     }

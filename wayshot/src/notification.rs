@@ -10,30 +10,19 @@ use crate::screenshot::ShotResult;
 
 const DEFAULT_TIMEOUT_MS: i32 = 5000;
 
-pub fn send_success(
-    result: &ShotResult,
-    saved_location: Option<&Path>,
-    config: &NotificationConfig,
-) {
-    let body = match result {
-        ShotResult::Output { name } => format!("Screenshot of output '{name}' saved"),
-        ShotResult::Toplevel { identifier } => {
-            format!("Screenshot of toplevel '{identifier}' saved")
-        }
-        ShotResult::Area => "Screenshot of selected area saved".to_string(),
-        ShotResult::All => "Screenshot of all outputs saved".to_string(),
-    };
+/// Where the screenshot went, for the notification's text.
+pub(crate) struct Delivery<'a> {
+    pub(crate) saved_to: Option<&'a Path>,
+    pub(crate) clipboard: bool,
+}
 
+pub fn send_success(result: &ShotResult, delivery: Delivery, config: &NotificationConfig) {
     let mut notification = build_base_notification(config, true);
     notification.urgency(Urgency::Normal);
-    notification.body(&body);
+    notification.body(&success_body(result, &delivery));
 
-    if let Some(path) = saved_location {
-        let dir_path = path
-            .parent()
-            .unwrap_or(Path::new("."))
-            .to_string_lossy()
-            .to_string();
+    if let Some(path) = delivery.saved_to {
+        let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
         notification.action("open_location", "Open Folder");
         notification.action("default", "Open Folder");
@@ -43,12 +32,7 @@ pub fn send_success(
                 if let Ok(handle) = notification.show() {
                     handle.wait_for_action(|action| {
                         if action == "open_location" || action == "default" {
-                            let cmd = match &config.action {
-                                Some(custom) => custom.clone(),
-                                None => format!("xdg-open {dir_path}"),
-                            };
-                            let _ = Command::new("sh")
-                                .args(["-c", &cmd])
+                            let _ = open_folder_command(config, &dir)
                                 .stdout(std::process::Stdio::null())
                                 .stderr(std::process::Stdio::null())
                                 .spawn();
@@ -66,6 +50,48 @@ pub fn send_success(
         }
     } else {
         let _ = notification.show();
+    }
+}
+
+/// "Screenshot of output 'DP-1' saved to wayshot-….png": says "saved" only
+/// when a file was written (it said so for `--clipboard` or `-` too).
+pub(crate) fn success_body(result: &ShotResult, delivery: &Delivery) -> String {
+    let what = match result {
+        ShotResult::Output { name } => format!("Screenshot of output '{name}'"),
+        ShotResult::Toplevel { identifier } => format!("Screenshot of toplevel '{identifier}'"),
+        ShotResult::Area => "Screenshot of selected area".to_string(),
+        ShotResult::All => "Screenshot of all outputs".to_string(),
+    };
+    match (delivery.saved_to, delivery.clipboard) {
+        (Some(path), clipboard) => {
+            let name = path
+                .file_name()
+                .unwrap_or(path.as_os_str())
+                .to_string_lossy();
+            let copied = if clipboard { " and copied" } else { "" };
+            format!("{what} saved to {name}{copied}")
+        }
+        (None, true) => format!("{what} copied to the clipboard"),
+        (None, false) => format!("{what} taken"),
+    }
+}
+
+/// The "Open Folder" action. The default opens the folder with `xdg-open`
+/// as one argument; it used to go through `sh -c "xdg-open {dir}"`, which
+/// split a folder name with spaces and ran `$(…)` in one. A configured
+/// `action` is a shell command, as documented.
+pub(crate) fn open_folder_command(config: &NotificationConfig, dir: &Path) -> Command {
+    match &config.action {
+        Some(custom) => {
+            let mut command = Command::new("sh");
+            command.args(["-c", custom]);
+            command
+        }
+        None => {
+            let mut command = Command::new("xdg-open");
+            command.arg(dir);
+            command
+        }
     }
 }
 
