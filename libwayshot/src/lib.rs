@@ -26,12 +26,13 @@ use std::{
 
 #[cfg(feature = "dmabuf")]
 use dispatch::DMABUFState;
+use dispatch::ExtSessionGuard;
 use dispatch::LayerShellState;
 use image::DynamicImage;
 use memmap2::MmapMut;
 #[cfg(feature = "dmabuf")]
 use screencopy::{DMAFrameFormat, DMAFrameGuard};
-use screencopy::{FrameCopy, FrameData, FrameFormat, FrameGuard, create_shm_fd};
+use screencopy::{FrameCopy, FrameData, FrameFormat, FrameGuard, OnDrop, create_shm_fd};
 use tracing::debug;
 use wayland_client::{
     Connection, EventQueue, Proxy,
@@ -129,6 +130,17 @@ pub struct WayshotConnection {
 pub enum WayshotFrame {
     WlrScreenshot(ZwlrScreencopyFrameV1),
     ExtImageCopy(ExtImageCopyCaptureFrameV1),
+}
+
+impl WayshotFrame {
+    /// Destroy a frame that won't be copied (after reading the formats from
+    /// its state). wayland-client doesn't destroy it when it is dropped.
+    pub fn destroy(self) {
+        match self {
+            WayshotFrame::WlrScreenshot(frame) => frame.destroy(),
+            WayshotFrame::ExtImageCopy(frame) => frame.destroy(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -512,11 +524,13 @@ impl WayshotConnection {
     pub fn get_available_frame_formats(&self, target: &WayshotTarget) -> Result<Vec<FrameFormat>> {
         let state = match target {
             WayshotTarget::Screen(output) => {
-                let (state, _) = self.capture_output_frame_get_state(output, 0, None)?;
+                let (state, frame) = self.capture_output_frame_get_state(output, 0, None)?;
+                frame.destroy();
                 state
             }
             WayshotTarget::Toplevel(toplevel) => {
-                let (state, _) = self.capture_toplevel_frame_get_state(toplevel, false)?;
+                let (state, frame) = self.capture_toplevel_frame_get_state(toplevel, false)?;
+                frame.destroy();
                 state
             }
         };
@@ -777,8 +791,18 @@ impl WayshotConnection {
 
         // Empty internal event buffer until buffer_done is set to true which is when the Buffer done
         // event is fired, aka the capture from the compositor is successful.
+        // A compositor may send `failed` instead (output gone, capture
+        // refused): buffer_done never comes then.
         while !state.buffer_done.load(Ordering::SeqCst) {
-            event_queue.blocking_dispatch(&mut state)?;
+            if state.state.is_some() {
+                frame.destroy();
+                tracing::error!("Frame capture failed before its buffer was described");
+                return Err(Error::FramecopyFailed);
+            }
+            if let Err(e) = event_queue.blocking_dispatch(&mut state) {
+                frame.destroy();
+                return Err(e.into());
+            }
         }
 
         tracing::trace!(
@@ -815,8 +839,12 @@ impl WayshotConnection {
             .unwrap_or(Options::PaintCursors);
         let session = manager.create_session(&source, options, &qh, ());
         let frame = session.create_frame(&qh, ());
+        state.ext_session = Some(ExtSessionGuard { session, source });
         while !state.session_done {
-            event_queue.blocking_dispatch(&mut state)?;
+            if let Err(e) = event_queue.blocking_dispatch(&mut state) {
+                frame.destroy();
+                return Err(e.into());
+            }
         }
         tracing::trace!(
             "Received compositor frame buffer formats: {:#?}",
@@ -939,6 +967,7 @@ impl WayshotConnection {
         modifier: u64,
         fd: T,
     ) -> Result<DMAFrameGuard> {
+        let _destroy_frame = OnDrop(|| frame.destroy());
         // Connecting to wayland environment.
         let Some(dmabuf_state) = &self.dmabuf_state else {
             return Err(Error::NoDMAStateError);
@@ -972,8 +1001,13 @@ impl WayshotConnection {
             &qh,
             (),
         );
+        dma_params.destroy();
+        // Destroyed on failure too.
+        let guard = DMAFrameGuard {
+            buffer: dmabuf_wlbuf,
+        };
         // Copy the pixel data advertised by the compositor into the buffer we just created.
-        frame.attach_buffer(&dmabuf_wlbuf);
+        frame.attach_buffer(&guard.buffer);
         frame.capture();
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
@@ -991,9 +1025,7 @@ impl WayshotConnection {
                     FrameState::Finished => {
                         event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
-                        return Ok(DMAFrameGuard {
-                            buffer: dmabuf_wlbuf,
-                        });
+                        return Ok(guard);
                     }
                 }
             }
@@ -1013,6 +1045,7 @@ impl WayshotConnection {
         modifier: u64,
         fd: T,
     ) -> Result<DMAFrameGuard> {
+        let _destroy_frame = OnDrop(|| frame.destroy());
         let Some(dmabuf_state) = &self.dmabuf_state else {
             return Err(Error::NoDMAStateError);
         };
@@ -1045,9 +1078,14 @@ impl WayshotConnection {
             &qh,
             (),
         );
+        dma_params.destroy();
+        // Destroyed on failure too.
+        let guard = DMAFrameGuard {
+            buffer: dmabuf_wlbuf,
+        };
         tracing::trace!("Called  ZwpLinuxBufferParamsV1::create_immed to create WlBuffer ");
         // Copy the pixel data advertised by the compositor into the buffer we just created.
-        frame.copy(&dmabuf_wlbuf);
+        frame.copy(&guard.buffer);
         tracing::debug!("wlr-screencopy copy() with dmabuf complete");
 
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
@@ -1066,9 +1104,7 @@ impl WayshotConnection {
                     FrameState::Finished => {
                         event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
-                        return Ok(DMAFrameGuard {
-                            buffer: dmabuf_wlbuf,
-                        });
+                        return Ok(guard);
                     }
                 }
             }
@@ -1101,6 +1137,7 @@ impl WayshotConnection {
         frame_format: FrameFormat,
         fd: T,
     ) -> Result<FrameGuard> {
+        let _destroy_frame = OnDrop(|| frame.destroy());
         let mut event_queue = self.registers.capture_event_queue.borrow_mut();
         // Connecting to wayland environment.
         let qh = event_queue.handle();
@@ -1125,9 +1162,16 @@ impl WayshotConnection {
             &qh,
             (),
         );
+        // Destroyed on failure too.
+        let mut guard = FrameGuard {
+            buffer,
+            shm_pool,
+            size: frame_format.size,
+            transform: None,
+        };
 
         // Copy the pixel data advertised by the compositor into the buffer we just created.
-        frame.copy(&buffer);
+        frame.copy(&guard.buffer);
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
             // Basically reads, if frame state is not None then...
@@ -1140,12 +1184,8 @@ impl WayshotConnection {
                     FrameState::Finished => {
                         event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
-                        return Ok(FrameGuard {
-                            buffer,
-                            shm_pool,
-                            size: frame_format.size,
-                            transform: state.transform,
-                        });
+                        guard.transform = state.transform;
+                        return Ok(guard);
                     }
                 }
             }
@@ -1161,6 +1201,7 @@ impl WayshotConnection {
         frame_format: FrameFormat,
         fd: T,
     ) -> Result<FrameGuard> {
+        let _destroy_frame = OnDrop(|| frame.destroy());
         let mut event_queue = self.registers.capture_event_queue.borrow_mut();
         // Connecting to wayland environment.
         let qh = event_queue.handle();
@@ -1185,9 +1226,16 @@ impl WayshotConnection {
             &qh,
             (),
         );
+        // Destroyed on failure too.
+        let mut guard = FrameGuard {
+            buffer,
+            shm_pool,
+            size: frame_format.size,
+            transform: None,
+        };
 
         // Copy the pixel data advertised by the compositor into the buffer we just created.
-        frame.attach_buffer(&buffer);
+        frame.attach_buffer(&guard.buffer);
         frame.capture();
         // On copy the Ready / Failed events are fired by the frame object, so here we check for them.
         loop {
@@ -1205,12 +1253,8 @@ impl WayshotConnection {
                     FrameState::Finished => {
                         event_queue.roundtrip(&mut state)?;
                         tracing::trace!("Frame copy finished");
-                        return Ok(FrameGuard {
-                            buffer,
-                            shm_pool,
-                            size: frame_format.size,
-                            transform: state.transform,
-                        });
+                        guard.transform = state.transform;
+                        return Ok(guard);
                     }
                 }
             }
@@ -1642,8 +1686,12 @@ impl WayshotConnection {
         };
         let session = manager.create_session(&source, options, &qh, ());
         let frame = session.create_frame(&qh, ());
+        state.ext_session = Some(ExtSessionGuard { session, source });
         while !state.session_done {
-            event_queue.blocking_dispatch(&mut state)?;
+            if let Err(e) = event_queue.blocking_dispatch(&mut state) {
+                frame.destroy();
+                return Err(e.into());
+            }
         }
 
         Ok((state, WayshotFrame::ExtImageCopy(frame)))

@@ -31,6 +31,7 @@ use wayland_protocols_wlr::screencopy::v1::client::zwlr_screencopy_manager_v1::Z
 use crate::{
     Error, Result, Size, WayshotConnection, WayshotTarget,
     dispatch::{CaptureFrameState, DMABUFState, FrameState, WayshotState},
+    screencopy::OnDrop,
 };
 
 /// It is a unit to do screencast. It storages used information for screencast
@@ -96,9 +97,15 @@ impl WayshotScreenCast {
         };
 
         let frame = screencopy_manager.capture_output(self.cursor_overlay as i32, output, &qh, ());
+        let _destroy_frame = OnDrop(|| frame.destroy());
         // Empty internal event buffer until buffer_done is set to true which is when the Buffer done
         // event is fired, aka the capture from the compositor is successful.
+        // `failed` may come instead, and then buffer_done never does.
         while !state.buffer_done.load(Ordering::SeqCst) {
+            if state.state.is_some() {
+                tracing::error!("Frame capture failed before its buffer was described");
+                return Err(Error::FramecopyFailed);
+            }
             self.event_queue.blocking_dispatch(&mut state)?;
         }
         if let Some(shm_format) = &self.shm_format {
@@ -218,6 +225,7 @@ impl WayshotScreenCast {
         frame: ExtImageCopyCaptureFrameV1,
         mut state: CaptureFrameState,
     ) -> Result<()> {
+        let _destroy_frame = OnDrop(|| frame.destroy());
         while !state.session_done {
             self.event_queue.blocking_dispatch(&mut state)?;
         }
@@ -315,7 +323,8 @@ impl WayshotConnection {
         if self.dmabuf_state.is_some() {
             return Ok(());
         }
-        let (mut state, _) = self.capture_target_frame_get_state(&target, false, None)?;
+        let (mut state, frame) = self.capture_target_frame_get_state(&target, false, None)?;
+        frame.destroy();
         let (globals, evq) = registry_queue_init::<WayshotState>(&self.conn)?;
         let Some(gbm) = state.gbm.take() else {
             return Err(Error::NoDMAStateError);
@@ -355,7 +364,8 @@ impl WayshotConnection {
         let Some(dmabuf_state) = &self.dmabuf_state else {
             return Err(Error::NoDMAStateError);
         };
-        let (state, _) = self.capture_target_frame_get_state(&target, cursor_overlay, None)?;
+        let (state, frame) = self.capture_target_frame_get_state(&target, cursor_overlay, None)?;
+        frame.destroy();
         if state.dmabuf_formats.is_empty() {
             return Err(Error::NoSupportedBufferFormat);
         }
@@ -443,7 +453,8 @@ impl WayshotConnection {
     ) -> Result<WayshotScreenCast> {
         let (event_queue, image_copy_manager, foreign_manager, output_manager, wlr_screencopy) =
             self.screencast_init()?;
-        let (state, _) = self.capture_target_frame_get_state(&target, cursor_overlay, None)?;
+        let (state, frame) = self.capture_target_frame_get_state(&target, cursor_overlay, None)?;
+        frame.destroy();
         let Some(frame_format) = state
             .formats
             .iter()

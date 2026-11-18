@@ -210,6 +210,21 @@ pub enum FrameState {
     Finished,
 }
 
+/// An ext-image-copy session and its source. wlroots stops a session's
+/// frames when the session is destroyed, so they live as long as the
+/// capture state, which outlives the copy; then both are destroyed.
+pub(crate) struct ExtSessionGuard {
+    pub(crate) session: ExtImageCopyCaptureSessionV1,
+    pub(crate) source: ExtImageCaptureSourceV1,
+}
+
+impl Drop for ExtSessionGuard {
+    fn drop(&mut self) {
+        self.session.destroy();
+        self.source.destroy();
+    }
+}
+
 pub struct CaptureFrameState {
     pub formats: Vec<FrameFormat>,
     pub dmabuf_formats: Vec<DMAFrameFormat>,
@@ -223,6 +238,7 @@ pub struct CaptureFrameState {
     #[cfg_attr(not(feature = "dmabuf"), allow(dead_code))]
     find_gbm: bool,
     session_size: Size,
+    pub(crate) ext_session: Option<ExtSessionGuard>,
 }
 
 impl CaptureFrameState {
@@ -242,6 +258,7 @@ impl CaptureFrameState {
                 width: 0,
                 height: 0,
             },
+            ext_session: None,
         }
     }
 }

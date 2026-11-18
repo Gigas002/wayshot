@@ -22,6 +22,17 @@ use crate::{
     region::{LogicalRegion, Size},
 };
 
+/// Runs its closure when dropped: destroys protocol objects (frames,
+/// sessions, sources) on every return path, errors included.
+/// wayland-client never destroys a proxy on drop.
+pub(crate) struct OnDrop<F: FnMut()>(pub(crate) F);
+
+impl<F: FnMut()> Drop for OnDrop<F> {
+    fn drop(&mut self) {
+        (self.0)()
+    }
+}
+
 pub struct FrameGuard {
     pub buffer: WlBuffer,
     pub shm_pool: WlShmPool,
