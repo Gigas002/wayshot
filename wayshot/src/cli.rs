@@ -190,8 +190,10 @@ pub struct Cli {
     // ─── Global options ───────────────────────────────────────────────────────
     /// Path to the config file. Defaults to:
     ///   1. `$XDG_CONFIG_HOME/wayshot/config.toml`
-    ///   2. `$HOME/wayshot/config.toml`
+    ///   2. `$HOME/.config/wayshot/config.toml` when `$XDG_CONFIG_HOME` is unset
     ///   3. Built-in defaults when no file is found.
+    ///
+    /// A file that doesn't parse, or has an unknown key, is an error.
     #[arg(long, verbatim_doc_comment)]
     pub config: Option<PathBuf>,
 

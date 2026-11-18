@@ -437,3 +437,39 @@ fn notifications_precedence() {
     });
     assert!(!AppSettings::resolve(&cli(&["--silent"]), &config).notifications);
 }
+
+/// A `[base]` table that doesn't mention `file` keeps saving: setting only
+/// `cursor = true` used to stop wayshot from writing any file (exit 0).
+#[test]
+fn partial_base_keeps_saving_files() {
+    let config: Config = toml::from_str("[base]\ncursor = true\n").unwrap();
+    let settings = AppSettings::resolve(&cli(&[]), &config);
+    assert!(settings.cursor);
+    assert!(settings.file.is_some(), "no file would be written");
+
+    let config: Config = toml::from_str("[base]\nfile = false\n").unwrap();
+    assert!(AppSettings::resolve(&cli(&[]), &config).file.is_none());
+}
+
+/// `[base] geometry_*_color` were parsed and never used; they now apply
+/// when `[geometry]` doesn't set the color.
+#[cfg(feature = "selector")]
+#[test]
+fn base_geometry_colors_are_a_fallback() {
+    let config: Config = toml::from_str(
+        "[base]\ngeometry_foreground_color = \"#010101ff\"\n\
+         geometry_background_color = \"#020202ff\"\n\
+         [geometry]\nbackground_color = \"#030303ff\"\n",
+    )
+    .unwrap();
+    match AppSettings::resolve(&cli(&["-g"]), &config).command {
+        Command::Screenshot(CaptureMode::Geometry {
+            foreground_color,
+            background_color,
+        }) => {
+            assert_eq!(foreground_color.as_deref(), Some("#010101ff"));
+            assert_eq!(background_color.as_deref(), Some("#030303ff"));
+        }
+        _ => panic!("expected interactive Geometry capture mode"),
+    }
+}

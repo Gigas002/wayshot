@@ -18,6 +18,11 @@ following locations:
 . _$XDG_CONFIG_HOME/wayshot/config.toml_
 . _$HOME/.config/wayshot/config.toml_
 
+Every key is optional; a key that is left out takes its default. A file that
+doesn't parse, an unknown key or table, or an unknown value (such as a PNG
+compression name) is an error: wayshot prints it and exits without taking a
+screenshot. So does a file given with _--config_ that doesn't exist.
+
 # BASE
 
 This section documents the *[base]* table of the configuration file

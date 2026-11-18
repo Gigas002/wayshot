@@ -267,15 +267,52 @@ fn png_get_filter_defaults_when_unset() {
 #[test]
 fn load_returns_none_for_missing_file() {
     let path = temp_path("does-not-exist");
-    assert!(Config::load(&path).is_none());
+    assert!(Config::load(&path).unwrap().is_none());
 }
 
 #[test]
-fn load_returns_none_for_invalid_toml() {
+fn load_reports_invalid_toml_with_the_path() {
     let path = write_temp_toml("invalid", "this is not [ valid toml");
     let result = Config::load(&path);
     let _ = std::fs::remove_file(&path);
-    assert!(result.is_none());
+    let err = result.unwrap_err();
+    assert!(err.contains(&path.display().to_string()), "{err}");
+}
+
+/// Misspelt keys and values were ignored without a word (the defaults
+/// applied); they are now errors that name the setting.
+#[test]
+fn load_rejects_unknown_keys_and_values() {
+    for (toml, needle) in [
+        ("[base]\ncursr = true\n", "cursr"),
+        ("[bsae]\ncursor = true\n", "bsae"),
+        ("[encoding.png]\nlevel = 1\n", "level"),
+        ("[encoding.png]\ncompression = \"fastest\"\n", "fastest"),
+        ("[encoding.png]\ncompression = 12\n", "12"),
+        ("[encoding.png]\nfilter = \"paethh\"\n", "paethh"),
+        ("[base]\nlog_level = \"verbose\"\n", "verbose"),
+        ("[notification]\ntimeout = 5\n", "timeout"),
+    ] {
+        let path = write_temp_toml("unknown", toml);
+        let result = Config::load(&path);
+        let _ = std::fs::remove_file(&path);
+        let err = result.expect_err(toml);
+        assert!(err.contains(needle), "{toml:?}: {err}");
+    }
+}
+
+/// The example config shipped in the repository loads, with the same
+/// values as the built-in defaults where it sets them.
+#[test]
+fn example_config_loads() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config.toml");
+    let config = Config::load(&path).unwrap().expect("example config exists");
+    let (base, default) = (config.base.unwrap(), Base::default());
+    assert_eq!(base.cursor, default.cursor);
+    assert_eq!(base.freeze, default.freeze);
+    assert_eq!(base.file, default.file);
+    assert_eq!(base.clipboard, default.clipboard);
+    assert_eq!(base.notifications, default.notifications);
 }
 
 #[test]
@@ -304,7 +341,7 @@ background_color = "#222222ff"
     let path = write_temp_toml("full", toml);
     let config = Config::load(&path);
     let _ = std::fs::remove_file(&path);
-    let config = config.expect("valid config should parse");
+    let config = config.unwrap().expect("valid config should parse");
 
     let base = config.base.expect("base section present");
     assert_eq!(base.output.as_deref(), Some("eDP-1"));
@@ -330,7 +367,9 @@ fn load_parses_a_partial_config_file() {
 cursor = true
 "#;
     let path = write_temp_toml("partial", toml);
-    let config = Config::load(&path).expect("valid config should parse");
+    let config = Config::load(&path)
+        .unwrap()
+        .expect("valid config should parse");
     let _ = std::fs::remove_file(&path);
 
     assert!(config.base.is_some());

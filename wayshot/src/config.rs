@@ -5,6 +5,7 @@ use std::{env, io::Read, path::PathBuf};
 use tracing::Level;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub base: Option<Base>,
     pub file: Option<File>,
@@ -26,12 +27,64 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load(path: &PathBuf) -> Option<Config> {
-        let mut config_file = std::fs::File::open(path).ok()?;
+    /// Read and check a config file. Errors name the file and, for a bad
+    /// value or an unknown key, the setting. `Ok(None)` when the file
+    /// doesn't exist.
+    pub fn load(path: &PathBuf) -> Result<Option<Config>, String> {
+        let mut config_file = match std::fs::File::open(path) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        };
         let mut config_str = String::new();
-        config_file.read_to_string(&mut config_str).ok()?;
+        config_file
+            .read_to_string(&mut config_str)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let config: Config =
+            toml::from_str(&config_str).map_err(|e| format!("{}: {e}", path.display()))?;
+        config
+            .check()
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok(Some(config))
+    }
 
-        toml::from_str(&config_str).ok()?
+    /// Values that parse but mean nothing: misspelt names used to fall
+    /// back to a default without a word.
+    fn check(&self) -> Result<(), String> {
+        if let Some(level) = self.base.as_ref().and_then(|b| b.log_level.as_deref())
+            && !["trace", "debug", "info", "warn", "error"].contains(&level)
+        {
+            return Err(format!(
+                "[base] log_level: unknown level '{level}' (trace, debug, info, warn, error)"
+            ));
+        }
+        let png = self.encoding.as_ref().and_then(|e| e.png.as_ref());
+        match png.and_then(|p| p.compression.as_ref()) {
+            Some(PngCompression::Level(level)) if *level > 9 => {
+                return Err(format!(
+                    "[encoding.png] compression: level {level} is out of range (0-9)"
+                ));
+            }
+            Some(PngCompression::Named(name))
+                if !["default", "best", "fast", "none", "uncompressed"]
+                    .contains(&name.as_str()) =>
+            {
+                return Err(format!(
+                    "[encoding.png] compression: unknown value '{name}' \
+                     (default, fast, best, none, uncompressed or 0-9)"
+                ));
+            }
+            _ => {}
+        }
+        if let Some(filter) = png.and_then(|p| p.filter.as_deref())
+            && !["none", "sub", "up", "avg", "paeth", "adaptive"].contains(&filter)
+        {
+            return Err(format!(
+                "[encoding.png] filter: unknown value '{filter}' \
+                 (none, sub, up, avg, paeth, adaptive)"
+            ));
+        }
+        Ok(())
     }
 
     pub fn get_default_path() -> PathBuf {
@@ -42,6 +95,7 @@ impl Config {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Base {
     pub output: Option<String>,
     pub cursor: Option<bool>,
@@ -91,6 +145,7 @@ impl Base {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct File {
     pub path: Option<PathBuf>,
     pub name_format: Option<String>,
@@ -108,6 +163,7 @@ impl Default for File {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Geometry {
     pub foreground_color: Option<String>,
     pub background_color: Option<String>,
@@ -123,6 +179,7 @@ impl Default for Geometry {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Encoding {
     pub jxl: Option<Jxl>,
     pub png: Option<Png>,
@@ -138,6 +195,7 @@ impl Default for Encoding {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Jxl {
     pub lossless: Option<bool>,
     pub distance: Option<f32>,
@@ -177,6 +235,7 @@ pub enum PngCompression {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Png {
     pub compression: Option<PngCompression>,
     pub filter: Option<String>,
@@ -229,6 +288,7 @@ impl Png {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NotificationConfig {
     /// Shell command to run when the notification is clicked.
     pub action: Option<String>,

@@ -151,6 +151,16 @@ impl AppSettings {
                 break 'cmd Command::ColorPicker(fmt);
             }
             let output = cli.output.clone().or_else(|| base.output.clone());
+            // `[base] geometry_*_color` (older key names) count when
+            // `[geometry]` doesn't set the color.
+            let geometry_config = Geometry {
+                foreground_color: geometry_config
+                    .foreground_color
+                    .or_else(|| base.geometry_foreground_color.clone()),
+                background_color: geometry_config
+                    .background_color
+                    .or_else(|| base.geometry_background_color.clone()),
+            };
             Command::Screenshot(Self::resolve_capture_mode(cli, output, geometry_config))
         };
 
@@ -238,7 +248,9 @@ impl AppSettings {
             }
             return utils::get_full_file_name(&path, file_name_format, encoding).map(Some);
         }
-        if base.file.unwrap_or_default() {
+        // Saving is on unless the config turns it off: a `[base]` without
+        // `file` used to turn it off.
+        if base.file.unwrap_or(true) {
             let dir = file_config
                 .path
                 .clone()

@@ -64,8 +64,22 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // A broken config is an error (the logger isn't set up yet: it is
+    // configured from the file). A missing default file means defaults; a
+    // missing --config file is an error.
     let config_path = cli.config.clone().unwrap_or(Config::get_default_path());
-    let config = Config::load(&config_path).unwrap_or_default();
+    let config = match Config::load(&config_path) {
+        Ok(Some(config)) => config,
+        Ok(None) if cli.config.is_none() => Config::default(),
+        Ok(None) => {
+            eprintln!("wayshot: config file {} not found", config_path.display());
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("wayshot: invalid config {e}");
+            std::process::exit(1);
+        }
+    };
 
     #[cfg(feature = "logger")]
     logger::setup(&cli, &config);

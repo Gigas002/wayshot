@@ -164,25 +164,28 @@ fn capturing_to_a_file_writes_a_valid_png_and_the_notification_fork_does_not_han
     // doesn't block wayshot's own exit even without a notification daemon
     // present in CI.
     //
-    // --config points at a path that doesn't exist so this doesn't depend on
-    // (and isn't silently skipped by) a real user config.toml that disables
-    // notifications - discovered by testing on a machine with exactly such a
-    // config, which made this test pass without ever actually exercising the
-    // notification/fork path it's meant to cover.
+    // --config points at an empty file (all defaults) so this doesn't depend
+    // on (and isn't silently skipped by) a real user config.toml that
+    // disables notifications - discovered by testing on a machine with
+    // exactly such a config, which made this test pass without ever actually
+    // exercising the notification/fork path it's meant to cover. (A missing
+    // --config file is an error.)
     let path = std::env::temp_dir().join(format!(
         "wayshot-integration-test-{}-notify-fork.png",
         std::process::id()
     ));
-    let bogus_config = std::env::temp_dir().join(format!(
-        "wayshot-integration-test-{}-nonexistent-config.toml",
+    let empty_config = std::env::temp_dir().join(format!(
+        "wayshot-integration-test-{}-empty-config.toml",
         std::process::id()
     ));
+    std::fs::write(&empty_config, "").expect("write empty config");
     let output = Command::new(env!("CARGO_BIN_EXE_wayshot"))
         .args(["--encoding", "png", "--config"])
-        .arg(&bogus_config)
+        .arg(&empty_config)
         .arg(&path)
         .output()
         .expect("failed to run wayshot binary");
+    let _ = std::fs::remove_file(&empty_config);
     assert!(
         output.status.success(),
         "stderr: {}",
