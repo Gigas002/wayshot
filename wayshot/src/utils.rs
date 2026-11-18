@@ -373,6 +373,8 @@ pub fn encode_image(
             jxl.get_effort(),
         ),
         EncodingFormat::Png => encode_to_png_bytes(image, png.get_compression(), png.get_filter()),
+        #[cfg(feature = "pnm")]
+        EncodingFormat::Ppm => encode_to_ppm_bytes(image),
         #[cfg(any(
             feature = "jpeg",
             feature = "pnm",
@@ -411,6 +413,23 @@ fn encode_to_jxl_bytes(
             PixelLayout::Rgb8,
         )?)
     }
+}
+
+/// A binary PPM (P6). image writes an RGBA image as PAM (P7), which most
+/// PPM readers (PIL, many viewers) reject; PPM has no alpha, so it is
+/// dropped (transparent gaps between outputs come out black).
+#[cfg(feature = "pnm")]
+fn encode_to_ppm_bytes(image: &DynamicImage) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use image::codecs::pnm::{PnmEncoder, PnmSubtype, SampleEncoding};
+    let mut buf = Vec::new();
+    let encoder =
+        PnmEncoder::new(&mut buf).with_subtype(PnmSubtype::Pixmap(SampleEncoding::Binary));
+    let rgb = match image {
+        DynamicImage::ImageRgb8(rgb) => std::borrow::Cow::Borrowed(rgb),
+        _ => std::borrow::Cow::Owned(image.to_rgb8()),
+    };
+    rgb.write_with_encoder(encoder)?;
+    Ok(buf)
 }
 
 fn encode_to_png_bytes(

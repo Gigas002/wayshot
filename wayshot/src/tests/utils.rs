@@ -420,3 +420,25 @@ fn without_opaque_alpha_drops_only_a_constant_alpha() {
         DynamicImage::ImageRgba8(_)
     ));
 }
+
+/// `.ppm` output is a binary PPM (P6), not PAM (P7), which most PPM
+/// readers reject.
+#[cfg(feature = "pnm")]
+#[test]
+fn ppm_output_is_a_p6_pixmap() {
+    use crate::config::{Jxl, Png};
+    use crate::utils::encode_image;
+    use image::{DynamicImage, Rgba, RgbaImage};
+    let image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(3, 2, Rgba([1, 2, 3, 255])));
+    let bytes = encode_image(
+        &image,
+        EncodingFormat::Ppm,
+        &Jxl::default(),
+        &Png::default(),
+    )
+    .unwrap();
+    assert!(bytes.starts_with(b"P6"), "{:?}", &bytes[..12]);
+    let decoded = image::load_from_memory(&bytes).unwrap();
+    assert!(matches!(decoded, DynamicImage::ImageRgb8(_)));
+    assert_eq!(decoded.to_rgba8(), image.to_rgba8());
+}
