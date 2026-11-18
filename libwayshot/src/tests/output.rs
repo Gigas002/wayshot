@@ -407,3 +407,43 @@ fn output_info_as_ref_returns_wl_output() {
     assert!(std::ptr::eq(wl_ref, &output_info.wl_output));
     mem::forget(output_info);
 }
+
+/// A rotated output reports its mode unrotated (3840x2160) and its logical
+/// size rotated (1080x1920 at scale 2). Comparing heights gave 2160/1920 =
+/// 1.125, so screenshots of a portrait HiDPI monitor were cut to the
+/// top-left part of the screen.
+#[test]
+fn scale_of_rotated_outputs() {
+    use wayland_client::protocol::wl_output::Transform;
+    let portrait = |transform| {
+        let mut output = make_output_info(
+            "DP-2",
+            "Portrait",
+            Size {
+                width: 3840,
+                height: 2160,
+            },
+            LogicalRegion {
+                inner: Region {
+                    position: Position { x: 0, y: 0 },
+                    size: Size {
+                        width: 1080,
+                        height: 1920,
+                    },
+                },
+            },
+        );
+        output.transform = transform;
+        output
+    };
+    for transform in [
+        Transform::_90,
+        Transform::_270,
+        Transform::Flipped90,
+        Transform::Flipped270,
+    ] {
+        let output = portrait(transform);
+        assert_eq!(output.scale(), 2.0, "{transform:?}");
+        mem::forget(output);
+    }
+}

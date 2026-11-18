@@ -119,8 +119,18 @@ impl Display for OutputInfo {
 }
 
 impl OutputInfo {
+    /// Physical pixels per logical pixel. `physical_size` is the mode, which
+    /// is never rotated, while the logical size is: for a 90° or 270°
+    /// transform the mode's width is the logical height.
     pub(crate) fn scale(&self) -> f64 {
-        self.physical_size.height as f64 / self.logical_region.inner.size.height as f64
+        let physical_height = match self.transform {
+            wl_output::Transform::_90
+            | wl_output::Transform::_270
+            | wl_output::Transform::Flipped90
+            | wl_output::Transform::Flipped270 => self.physical_size.width,
+            _ => self.physical_size.height,
+        };
+        physical_height as f64 / self.logical_region.inner.size.height as f64
     }
 
     /// return the physical_size
