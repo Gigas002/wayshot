@@ -311,3 +311,59 @@ impl TryFrom<&[OutputInfo]> for LogicalRegion {
         })
     }
 }
+
+/// The outputs a region touches, each with the part of the region on it.
+/// Outputs it doesn't touch are left out: capturing them is wasted work,
+/// and their scale must not decide the scale of the result.
+pub(crate) fn outputs_for_region(
+    outputs: &[OutputInfo],
+    region: LogicalRegion,
+) -> Vec<(OutputInfo, Option<EmbeddedRegion>)> {
+    outputs
+        .iter()
+        .filter_map(|output| {
+            EmbeddedRegion::new(region, output.into())
+                .map(|embedded| (output.clone(), Some(embedded)))
+        })
+        .collect()
+}
+
+/// `embedded` (logical, relative to its output) in the pixels of the
+/// output's whole frame, `physical` big once rotated. For capture paths
+/// that return the whole output, the frame is cut to this.
+pub(crate) fn physical_crop(embedded: &EmbeddedRegion, physical: Size) -> Option<Region> {
+    let logical = embedded.relative_to.inner.size;
+    if logical.width == 0 || logical.height == 0 {
+        return None;
+    }
+    let scale_x = physical.width as f64 / logical.width as f64;
+    let scale_y = physical.height as f64 / logical.height as f64;
+    let inner = embedded.inner;
+    let edge = |logical: i32, scale: f64, limit: u32, round: fn(f64) -> f64| {
+        (round(logical as f64 * scale) as i64).clamp(0, limit as i64) as u32
+    };
+    let x1 = edge(inner.position.x, scale_x, physical.width, f64::floor);
+    let y1 = edge(inner.position.y, scale_y, physical.height, f64::floor);
+    let x2 = edge(
+        inner.position.x + inner.size.width as i32,
+        scale_x,
+        physical.width,
+        f64::ceil,
+    );
+    let y2 = edge(
+        inner.position.y + inner.size.height as i32,
+        scale_y,
+        physical.height,
+        f64::ceil,
+    );
+    (x2 > x1 && y2 > y1).then_some(Region {
+        position: Position {
+            x: x1 as i32,
+            y: y1 as i32,
+        },
+        size: Size {
+            width: x2 - x1,
+            height: y2 - y1,
+        },
+    })
+}

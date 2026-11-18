@@ -377,3 +377,85 @@ fn toplevel_as_ref_returns_handle() {
     assert!(std::ptr::eq(handle_ref, &toplevel.handle));
     mem::forget(toplevel);
 }
+
+fn logical(x: i32, y: i32, width: u32, height: u32) -> LogicalRegion {
+    LogicalRegion {
+        inner: Region {
+            position: Position { x, y },
+            size: Size { width, height },
+        },
+    }
+}
+
+/// Only outputs the region touches are captured, each with its part of the
+/// region. All outputs were captured whole before, and the largest scale
+/// among them, even of outputs far from the region, scaled the result.
+#[test]
+fn outputs_for_region_keeps_only_intersecting_outputs() {
+    use crate::region::outputs_for_region;
+    let left = make_output(
+        "LEFT",
+        Position { x: 0, y: 0 },
+        Size {
+            width: 1920,
+            height: 1080,
+        },
+    );
+    let right = make_output(
+        "RIGHT",
+        Position { x: 1920, y: 0 },
+        Size {
+            width: 960,
+            height: 540,
+        },
+    );
+    let outputs = [left, right];
+
+    let on_left = outputs_for_region(&outputs, logical(100, 100, 400, 300));
+    assert_eq!(on_left.len(), 1);
+    assert_eq!(on_left[0].0.name, "LEFT");
+    let part = on_left[0].1.expect("embedded region");
+    assert_eq!(part.inner, logical(100, 100, 400, 300).inner);
+
+    let across = outputs_for_region(&outputs, logical(1800, 0, 300, 100));
+    let names: Vec<_> = across.iter().map(|(o, _)| o.name.as_str()).collect();
+    assert_eq!(names, ["LEFT", "RIGHT"]);
+    let right_part = across[1].1.expect("embedded region");
+    assert_eq!(right_part.inner, logical(0, 0, 180, 100).inner);
+
+    assert!(outputs_for_region(&outputs, logical(5000, 5000, 10, 10)).is_empty());
+    for (output, _) in on_left.into_iter().chain(across) {
+        mem::forget(output);
+    }
+    mem::forget(outputs);
+}
+
+/// The crop of a whole-output frame: logical coordinates times the
+/// output's scale, rounded outwards and kept inside the frame.
+#[test]
+fn physical_crop_scales_and_clamps() {
+    use crate::region::physical_crop;
+    let output = logical(0, 0, 1920, 1080);
+    let embedded = |x, y, w, h| EmbeddedRegion {
+        relative_to: output,
+        inner: logical(x, y, w, h).inner,
+    };
+    let scale2 = Size {
+        width: 3840,
+        height: 2160,
+    };
+    let crop = physical_crop(&embedded(100, 100, 400, 300), scale2).unwrap();
+    assert_eq!(crop, logical(200, 200, 800, 600).inner);
+
+    // Fractional scale 1.5: edges round outwards.
+    let scale15 = Size {
+        width: 2880,
+        height: 1620,
+    };
+    let crop = physical_crop(&embedded(1, 1, 3, 3), scale15).unwrap();
+    assert_eq!(crop, logical(1, 1, 5, 5).inner);
+
+    let crop = physical_crop(&embedded(1800, 1000, 120, 80), scale2).unwrap();
+    assert_eq!(crop, logical(3600, 2000, 240, 160).inner);
+    assert!(physical_crop(&embedded(0, 0, 0, 10), scale2).is_none());
+}

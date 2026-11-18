@@ -56,6 +56,7 @@ fn make_frame_copy(
         logical_region: LogicalRegion::default(),
         physical_size: Size { width, height },
         color_converted,
+        crop: None,
     }
 }
 
@@ -111,6 +112,7 @@ fn frame_copy_convert_color_unsupported_format_errors() {
             height: 4,
         },
         color_converted: false,
+        crop: None,
     };
     assert!(fc.convert_color_inplace().is_err());
 }
@@ -151,6 +153,7 @@ fn frame_copy_try_from_invalid_color_type_errors() {
             height: 4,
         },
         color_converted: false,
+        crop: None,
     };
     assert!(DynamicImage::try_from(&fc).is_err());
 }
@@ -199,6 +202,7 @@ fn make_frame_copy_rgb8(width: u32, height: u32, transform: wl_output::Transform
         logical_region: LogicalRegion::default(),
         physical_size: Size { width, height },
         color_converted: true,
+        crop: None,
     }
 }
 
@@ -222,6 +226,7 @@ fn make_frame_copy_with_transform(
         logical_region: LogicalRegion::default(),
         physical_size: Size { width, height },
         color_converted: true,
+        crop: None,
     }
 }
 
@@ -357,6 +362,7 @@ fn numbered_frame(
             height: h,
         },
         color_converted: true,
+        crop: None,
     }
 }
 
@@ -397,6 +403,33 @@ fn image_from_frame_honours_transform_and_stride() {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A crop (ext-image-copy returns whole outputs for regions) gives exactly
+/// that part of the full image, for every transform, with row padding.
+#[test]
+fn image_from_frame_crop_matches_cropping_the_full_image() {
+    use crate::region::{Position, Region};
+    use image::DynamicImage;
+    use wl_output::Transform as T;
+    let crop = Region {
+        position: Position { x: 1, y: 1 },
+        size: Size {
+            width: 2,
+            height: 1,
+        },
+    };
+    for bpp in [3, 4] {
+        for t in [T::Normal, T::_90, T::_180, T::Flipped270] {
+            let full = DynamicImage::try_from(&numbered_frame(5, 3, bpp, 4, t)).unwrap();
+            let mut frame = numbered_frame(5, 3, bpp, 4, t);
+            frame.crop = Some(crop);
+            let cropped = DynamicImage::try_from(&frame).unwrap();
+            let expected = full.crop_imm(1, 1, 2, 1);
+            assert_eq!(cropped.as_bytes(), expected.as_bytes(), "bpp {bpp} {t:?}");
+            assert_eq!((cropped.width(), cropped.height()), (2, 1));
         }
     }
 }

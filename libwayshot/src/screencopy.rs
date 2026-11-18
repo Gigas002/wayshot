@@ -97,6 +97,9 @@ pub struct FrameCopy {
     pub logical_region: LogicalRegion,
     pub physical_size: Size,
     pub(crate) color_converted: bool,
+    /// Part of the (rotated) frame to keep, when the compositor returned a
+    /// whole output for a region (ext-image-copy has no region capture).
+    pub(crate) crop: Option<crate::region::Region>,
 }
 
 impl FrameCopy {
@@ -159,6 +162,23 @@ impl FrameCopy {
             return Err(Error::BufferTooSmall);
         }
 
+        if self.transform == wl_output::Transform::Normal
+            && let Some(crop) = self.crop
+        {
+            // Copy only the kept rectangle (a small region of a 4K output).
+            let (x, y) = (crop.position.x as usize, crop.position.y as usize);
+            let (cw, ch) = (crop.size.width as usize, crop.size.height as usize);
+            if x + cw > w || y + ch > h {
+                return Err(Error::BufferTooSmall);
+            }
+            let mut pixels = vec![0u8; cw * ch * bpp];
+            for (v, out) in pixels.chunks_exact_mut(cw * bpp).enumerate() {
+                let start = (y + v) * stride + x * bpp;
+                out.copy_from_slice(&data[start..start + cw * bpp]);
+            }
+            return Self::image_from_pixels(bpp, crop.size.width, crop.size.height, pixels);
+        }
+
         let (image_width, image_height) = self.image_shape();
         let mut pixels = vec![0u8; w * h * bpp];
         if self.transform == wl_output::Transform::Normal {
@@ -176,9 +196,27 @@ impl FrameCopy {
             }
         }
 
+        let image = Self::image_from_pixels(bpp, image_width, image_height, pixels)?;
+        Ok(match self.crop {
+            Some(crop) => image.crop_imm(
+                crop.position.x as u32,
+                crop.position.y as u32,
+                crop.size.width,
+                crop.size.height,
+            ),
+            None => image,
+        })
+    }
+
+    fn image_from_pixels(
+        bpp: usize,
+        width: u32,
+        height: u32,
+        pixels: Vec<u8>,
+    ) -> Result<DynamicImage> {
         let image = match bpp {
-            3 => RgbImage::from_raw(image_width, image_height, pixels).map(DynamicImage::from),
-            _ => RgbaImage::from_raw(image_width, image_height, pixels).map(DynamicImage::from),
+            3 => RgbImage::from_raw(width, height, pixels).map(DynamicImage::from),
+            _ => RgbaImage::from_raw(width, height, pixels).map(DynamicImage::from),
         };
         image.ok_or(Error::BufferTooSmall)
     }

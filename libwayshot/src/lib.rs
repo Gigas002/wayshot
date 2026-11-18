@@ -437,6 +437,12 @@ impl WayshotConnection {
         self.image_copy_support
     }
 
+    /// Outputs are captured through ext-image-copy when the compositor has
+    /// it, else through wlr-screencopy. Only the latter can capture a region.
+    fn uses_ext_image_copy(&self) -> bool {
+        self.registers.image_copy_capture_manager.is_some()
+    }
+
     /// Fetch all accessible wayland outputs.
     pub fn get_all_outputs(&self) -> &[OutputInfo] {
         self.output_infos.as_slice()
@@ -884,7 +890,7 @@ impl WayshotConnection {
         capture_region: Option<EmbeddedRegion>,
     ) -> Result<(CaptureFrameState, WayshotFrame)> {
         let state = CaptureFrameState::new(self.need_try_find_gbm());
-        if self.registers.image_copy_capture_manager.is_some() {
+        if self.uses_ext_image_copy() {
             self.capture_output_frame_get_state_ext(state, cursor_overlay, output)
         } else {
             self.capture_output_frame_get_state_wlr(state, output, cursor_overlay, capture_region)
@@ -1245,6 +1251,10 @@ impl WayshotConnection {
             }
             _ => frame_format.size,
         };
+        // ext-image-copy always returns the whole output: keep the region's part.
+        let crop = capture_region
+            .filter(|_| self.uses_ext_image_copy())
+            .and_then(|region| region::physical_crop(&region, rotated_physical_size));
         let frame_copy = FrameCopy {
             frame_format,
             frame_color_type: image::ColorType::Rgb8,
@@ -1253,8 +1263,9 @@ impl WayshotConnection {
             logical_region: capture_region
                 .map(|capture_region| capture_region.logical())
                 .unwrap_or(output_info.logical_region),
-            physical_size: rotated_physical_size,
+            physical_size: crop.map_or(rotated_physical_size, |crop| crop.size),
             color_converted: false,
+            crop,
         };
         tracing::debug!("Created frame copy: {:#?}", frame_copy);
         Ok((frame_copy, frame_guard))
@@ -1383,45 +1394,15 @@ impl WayshotConnection {
         region_capturer: RegionCapturer,
         cursor_overlay: bool,
     ) -> Result<DynamicImage> {
-        let ext_top_level_support = self.toplevel_capture_support();
         let outputs_capture_regions: Vec<(OutputInfo, Option<EmbeddedRegion>)> =
             match region_capturer {
                 RegionCapturer::Outputs(ref outputs) => outputs
                     .iter()
                     .map(|output_info| (output_info.clone(), None))
                     .collect(),
-                RegionCapturer::Region(capture_region) => self
-                    .get_all_outputs()
-                    .iter()
-                    .filter_map(|output_info| {
-                        if ext_top_level_support {
-                            // NOTE: ext-image-copy do not have inner region capture support
-                            // So here we should not use the EmbeddedRegion
-                            return Some((output_info.clone(), None));
-                        }
-                        tracing::span!(
-                            tracing::Level::DEBUG,
-                            "filter_map",
-                            output = format!(
-                                "{output_info} at {region}",
-                                output_info = format!("{output_info}"),
-                                region = LogicalRegion::from(output_info),
-                            ),
-                            capture_region = format!("{}", capture_region),
-                        )
-                        .in_scope(|| {
-                            if let Some(relative_region) =
-                                EmbeddedRegion::new(capture_region, output_info.into())
-                            {
-                                tracing::debug!("Intersection found: {}", relative_region);
-                                Some((output_info.clone(), Some(relative_region)))
-                            } else {
-                                tracing::debug!("No intersection found");
-                                None
-                            }
-                        })
-                    })
-                    .collect(),
+                RegionCapturer::Region(capture_region) => {
+                    region::outputs_for_region(self.get_all_outputs(), capture_region)
+                }
                 RegionCapturer::Freeze(_) => self
                     .get_all_outputs()
                     .iter()
@@ -1439,13 +1420,19 @@ impl WayshotConnection {
             }
         };
 
-        // TODO When freeze was used, we can still further remove the outputs
-        // that don't intersect with the capture region.
+        // Frozen outputs were all captured for the overlay; only those the
+        // selection touches go into the result, and set its scale.
+        let frames: Vec<_> = frames
+            .into_iter()
+            .filter(|(_, _, output_info)| {
+                EmbeddedRegion::new(capture_region, output_info.into()).is_some()
+            })
+            .collect();
 
         thread::scope(|scope| {
-            let max_scale = outputs_capture_regions
+            let max_scale = frames
                 .iter()
-                .map(|(output_info, _)| output_info.scale())
+                .map(|(_, _, output_info)| output_info.scale())
                 .fold(1.0, f64::max);
 
             tracing::Span::current().record("max_scale", max_scale);
@@ -1603,6 +1590,7 @@ impl WayshotConnection {
             },
             physical_size: frame_format.size,
             color_converted: false,
+            crop: None,
         };
 
         frame_copy.get_image()
