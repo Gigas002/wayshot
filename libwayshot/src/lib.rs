@@ -740,13 +740,20 @@ impl WayshotConnection {
             stride,
             modifier
         );
+        let fd = match bo.fd_for_plane(0) {
+            Ok(fd) => fd,
+            Err(e) => {
+                frame.destroy();
+                return Err(e.into());
+            }
+        };
         let frame_guard = self.capture_output_frame_inner_dmabuf(
             state,
             frame,
             frame_format,
             stride,
             modifier,
-            bo.fd_for_plane(0).unwrap(),
+            fd,
         )?;
 
         Ok((frame_format, frame_guard, bo))

@@ -7,7 +7,7 @@
 //! - [`bind_egl_image_to_gl_texture`] – bind an EGLImage to the current GL texture (OES_EGL_image)
 //! - [`create_egl_image_and_bind_to_gl_texture`] – one-shot create + bind (e.g. for screencast)
 
-use std::os::fd::IntoRawFd;
+use std::os::fd::AsRawFd;
 
 use gbm::BufferObject;
 use r_egl_wayland::{EGL_INSTALCE, WayEglTrait, r_egl as egl};
@@ -56,6 +56,9 @@ pub fn create_egl_image_from_dmabuf(
 ) -> Result<EGLImageGuard> {
     type Attrib = egl::Attrib;
     let modifier: u64 = bo.modifier().into();
+    // EGL doesn't take ownership of the fd (EGL_EXT_image_dma_buf_import):
+    // it is closed when `plane_fd` drops, after eglCreateImage.
+    let plane_fd = bo.fd_for_plane(0)?;
     let image_attribs = [
         egl::WIDTH as Attrib,
         frame_format.size.width as Attrib,
@@ -64,7 +67,7 @@ pub fn create_egl_image_from_dmabuf(
         egl::LINUX_DRM_FOURCC_EXT as Attrib,
         bo.format() as Attrib,
         egl::DMA_BUF_PLANE0_FD_EXT as Attrib,
-        bo.fd_for_plane(0)?.into_raw_fd() as Attrib,
+        plane_fd.as_raw_fd() as Attrib,
         egl::DMA_BUF_PLANE0_OFFSET_EXT as Attrib,
         bo.offset(0) as Attrib,
         egl::DMA_BUF_PLANE0_PITCH_EXT as Attrib,
