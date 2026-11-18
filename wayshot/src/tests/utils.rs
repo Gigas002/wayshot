@@ -400,3 +400,23 @@ fn print_completions_does_not_panic_for_every_shell() {
         utils::print_completions(shell);
     }
 }
+
+/// Opaque captures lose the alpha channel before PNG encoding (smaller,
+/// faster); one transparent pixel keeps it, and the pixels are unchanged.
+#[test]
+fn without_opaque_alpha_drops_only_a_constant_alpha() {
+    use crate::utils::without_opaque_alpha;
+    use image::{DynamicImage, Rgba, RgbaImage};
+    let mut rgba = RgbaImage::from_fn(4, 3, |x, y| Rgba([x as u8 * 10, y as u8 * 20, 7, 255]));
+    let opaque = DynamicImage::ImageRgba8(rgba.clone());
+    let stripped = without_opaque_alpha(&opaque);
+    assert!(matches!(*stripped, DynamicImage::ImageRgb8(_)));
+    assert_eq!(stripped.to_rgba8(), rgba);
+
+    rgba.put_pixel(3, 2, Rgba([0, 0, 0, 0]));
+    let with_gap = DynamicImage::ImageRgba8(rgba);
+    assert!(matches!(
+        *without_opaque_alpha(&with_gap),
+        DynamicImage::ImageRgba8(_)
+    ));
+}
