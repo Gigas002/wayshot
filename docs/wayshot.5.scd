@@ -130,7 +130,7 @@ This section documents the *[file]* table of the configuration file
 *name_format* = _"<string>"_ | _"None"_
 
 	Formatting of screenshot file name to save on disk.
-	Refer to chrono formatting rules: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+	Refer to jiff's strftime rules: https://docs.rs/jiff/latest/jiff/fmt/strtime/index.html
 
 	CLI option takes precedence: *wayshot --file-name-format "wayshot-%Y_%m_%d-%H_%M_%S"*
 

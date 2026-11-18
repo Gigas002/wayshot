@@ -119,8 +119,9 @@ Wayshot - Screenshot tool for compositors implementing zwlr_screencopy_v1 such a
 		- jxl  _(requires_ *jxl* _feature, enabled by default)_
 
 *--file-name-format <FORMAT>*
-	Format string for the output file name. Refer to chrono strftime formatting rules:
-	https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+	Format string for the output file name (strftime). Refer to jiff's strftime rules:
+	https://docs.rs/jiff/latest/jiff/fmt/strtime/index.html
+	An unknown directive is an error.
 
 	Example: --file-name-format "%Y_%m_%d-%H_%M_%S"
 
