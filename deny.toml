@@ -27,6 +27,12 @@ private = { ignore = true }
 
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # `paste` (a proc macro, unmaintained but finished) comes in through
+    # image's AVIF encoder (ravif -> rav1e); there is no maintained release
+    # of rav1e without it yet. Remove once rav1e drops it.
+    { id = "RUSTSEC-2024-0436", reason = "transitive via rav1e (avif); no fix upstream" },
+]
 
 [bans]
 multiple-versions = "warn"
