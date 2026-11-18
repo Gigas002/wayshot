@@ -284,3 +284,119 @@ fn dma_frame_guard_drop_destroys_buffer() {
     let guard = DMAFrameGuard { buffer };
     drop(guard);
 }
+
+/// Where the old per-pixel loop put source pixel (u, v) of a w x h frame:
+/// the reference for every transform.
+fn reference_position(t: wl_output::Transform, u: u32, v: u32, w: u32, h: u32) -> (u32, u32) {
+    use wl_output::Transform as T;
+    match t {
+        T::Normal => (u, v),
+        T::_90 => (h - v - 1, u),
+        T::_180 => (w - u - 1, h - v - 1),
+        T::_270 => (v, w - u - 1),
+        T::Flipped => (w - u - 1, v),
+        T::Flipped90 => (v, u),
+        T::Flipped180 => (u, h - v - 1),
+        T::Flipped270 => (h - v - 1, w - u - 1),
+        _ => unreachable!(),
+    }
+}
+
+/// A frame whose pixels are all different, with `pad` unused bytes after
+/// each row (a compositor may choose a stride larger than width * bpp).
+fn numbered_frame(
+    w: u32,
+    h: u32,
+    bpp: u32,
+    pad: u32,
+    transform: wl_output::Transform,
+) -> FrameCopy {
+    let stride = w * bpp + pad;
+    let mut mmap = MmapOptions::new()
+        .len((stride * h) as usize)
+        .map_anon()
+        .unwrap();
+    for v in 0..h {
+        for u in 0..w {
+            let at = (v * stride + u * bpp) as usize;
+            let id = v * w + u;
+            mmap[at] = id as u8;
+            mmap[at + 1] = (id >> 8) as u8;
+            mmap[at + 2] = 7;
+            if bpp == 4 {
+                mmap[at + 3] = 255;
+            }
+        }
+        for p in 0..pad {
+            mmap[(v * stride + w * bpp + p) as usize] = 0xEE; // padding garbage
+        }
+    }
+    FrameCopy {
+        frame_format: FrameFormat {
+            format: if bpp == 4 {
+                wl_shm::Format::Xbgr8888
+            } else {
+                wl_shm::Format::Bgr888
+            },
+            size: Size {
+                width: w,
+                height: h,
+            },
+            stride,
+        },
+        frame_color_type: if bpp == 4 {
+            ColorType::Rgba8
+        } else {
+            ColorType::Rgb8
+        },
+        frame_data: FrameData::Mmap(mmap),
+        transform,
+        logical_region: LogicalRegion::default(),
+        physical_size: Size {
+            width: w,
+            height: h,
+        },
+        color_converted: true,
+    }
+}
+
+/// Every pixel lands where the per-pixel loop put it, for all transforms,
+/// with and without row padding. With padding the loop read the padding
+/// as pixels and ran past the image ("Image index (0, 1080) out of bounds
+/// (1920, 1080)", waycrate/wayshot#458, then turned into an error).
+#[test]
+fn image_from_frame_honours_transform_and_stride() {
+    use image::{DynamicImage, GenericImageView};
+    use wl_output::Transform as T;
+    let (w, h) = (5, 3);
+    for bpp in [3, 4] {
+        for pad in [0, 4, 9] {
+            for t in [
+                T::Normal,
+                T::_90,
+                T::_180,
+                T::_270,
+                T::Flipped,
+                T::Flipped90,
+                T::Flipped180,
+                T::Flipped270,
+            ] {
+                let frame = numbered_frame(w, h, bpp, pad, t);
+                let image = DynamicImage::try_from(&frame)
+                    .unwrap_or_else(|e| panic!("bpp {bpp} pad {pad} {t:?}: {e}"));
+                for v in 0..h {
+                    for u in 0..w {
+                        let (x, y) = reference_position(t, u, v, w, h);
+                        let id = v * w + u;
+                        let p = image.get_pixel(x, y).0;
+                        assert_eq!(
+                            (p[0], p[1], p[2]),
+                            (id as u8, (id >> 8) as u8, 7),
+                            "bpp {bpp} pad {pad} {t:?} at ({x}, {y})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

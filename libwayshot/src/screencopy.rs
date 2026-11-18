@@ -142,12 +142,45 @@ impl TryFrom<&FrameCopy> for DynamicImage {
 }
 
 impl FrameCopy {
+    /// Build the image: rows are read `stride` bytes apart (a compositor may
+    /// pad them), and pixels are placed according to the output transform.
     fn allocate_image(&self) -> Result<DynamicImage> {
-        match self.frame_color_type {
-            ColorType::Rgb8 => self.allocate_image_rgb8(),
-            ColorType::Rgba8 => self.allocate_image_rgba8(),
-            _ => Err(Error::InvalidColor),
+        let bpp = match self.frame_color_type {
+            ColorType::Rgb8 => 3,
+            ColorType::Rgba8 => 4,
+            _ => return Err(Error::InvalidColor),
+        };
+        let Size { width, height } = self.frame_format.size;
+        let (w, h) = (width as usize, height as usize);
+        let stride = self.frame_format.stride as usize;
+        let row = w * bpp;
+        let data = self.data();
+        if h > 0 && (stride < row || data.len() < stride * (h - 1) + row) {
+            return Err(Error::BufferTooSmall);
         }
+
+        let (image_width, image_height) = self.image_shape();
+        let mut pixels = vec![0u8; w * h * bpp];
+        if self.transform == wl_output::Transform::Normal {
+            for (v, out) in pixels.chunks_exact_mut(row).enumerate() {
+                out.copy_from_slice(&data[v * stride..v * stride + row]);
+            }
+        } else {
+            for v in 0..h {
+                let source_row = &data[v * stride..v * stride + row];
+                for (u, pixel) in source_row.chunks_exact(bpp).enumerate() {
+                    let (x, y) = self.pixel_position(u as u32, v as u32);
+                    let at = (y as usize * image_width as usize + x as usize) * bpp;
+                    pixels[at..at + bpp].copy_from_slice(pixel);
+                }
+            }
+        }
+
+        let image = match bpp {
+            3 => RgbImage::from_raw(image_width, image_height, pixels).map(DynamicImage::from),
+            _ => RgbaImage::from_raw(image_width, image_height, pixels).map(DynamicImage::from),
+        };
+        image.ok_or(Error::BufferTooSmall)
     }
 
     fn data(&self) -> &[u8] {
@@ -158,23 +191,22 @@ impl FrameCopy {
         }
     }
 
-    fn pixel_position(&self, index: usize) -> (u32, u32) {
-        let index = index as u32;
+    /// Where the frame's pixel (u, v) goes in the image.
+    fn pixel_position(&self, u: u32, v: u32) -> (u32, u32) {
         let Size { width, height } = self.frame_format.size;
         match self.transform {
-            wl_output::Transform::Normal => (index % width, index / width),
-            wl_output::Transform::_90 => (height - index / width - 1, index % width),
-            wl_output::Transform::_180 => (width - index % width - 1, height - index / width - 1),
-            wl_output::Transform::_270 => (index / width, width - index % width - 1),
-            wl_output::Transform::Flipped => (width - index % width - 1, index / width),
-            wl_output::Transform::Flipped90 => (index / width, index % width),
-            wl_output::Transform::Flipped180 => (index % width, height - index / width - 1),
-            wl_output::Transform::Flipped270 => {
-                (height - index / width - 1, width - index % width - 1)
-            }
+            wl_output::Transform::Normal => (u, v),
+            wl_output::Transform::_90 => (height - v - 1, u),
+            wl_output::Transform::_180 => (width - u - 1, height - v - 1),
+            wl_output::Transform::_270 => (v, width - u - 1),
+            wl_output::Transform::Flipped => (width - u - 1, v),
+            wl_output::Transform::Flipped90 => (v, u),
+            wl_output::Transform::Flipped180 => (u, height - v - 1),
+            wl_output::Transform::Flipped270 => (height - v - 1, width - u - 1),
             _ => unreachable!(),
         }
     }
+
     fn image_shape(&self) -> (u32, u32) {
         match self.transform {
             wl_output::Transform::Normal
@@ -185,44 +217,6 @@ impl FrameCopy {
             }
             _ => (self.frame_format.size.height, self.frame_format.size.width),
         }
-    }
-
-    fn allocate_image_rgba8(&self) -> Result<DynamicImage> {
-        let (width, height) = self.image_shape();
-        let mut img = RgbaImage::new(width, height);
-        for (index, pixel) in self.data().chunks(4).enumerate() {
-            let r = pixel[0];
-            let g = pixel[1];
-            let b = pixel[2];
-            let a = pixel[3];
-            let (x, y) = self.pixel_position(index);
-            // NOTE: Maybe wm side will sent dirty data
-            // Try to fix https://github.com/waycrate/wayshot/issues/458
-            let pixel = img
-                .get_pixel_mut_checked(x, y)
-                .ok_or(Error::ImageIndexOutOfBounds(x, y))?;
-
-            pixel.0 = [r, g, b, a];
-        }
-        Ok(DynamicImage::ImageRgba8(img))
-    }
-
-    fn allocate_image_rgb8(&self) -> Result<DynamicImage> {
-        let (width, height) = self.image_shape();
-        let mut img = RgbImage::new(width, height);
-        for (index, pixel) in self.data().chunks(3).enumerate() {
-            let r = pixel[0];
-            let g = pixel[1];
-            let b = pixel[2];
-            let (x, y) = self.pixel_position(index);
-            // NOTE: Maybe wm side will sent dirty data
-            // Try to fix https://github.com/waycrate/wayshot/issues/458
-            let pixel = img
-                .get_pixel_mut_checked(x, y)
-                .ok_or(Error::ImageIndexOutOfBounds(x, y))?;
-            pixel.0 = [r, g, b];
-        }
-        Ok(DynamicImage::ImageRgb8(img))
     }
 }
 
